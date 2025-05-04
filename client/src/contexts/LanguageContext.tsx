@@ -1,0 +1,1210 @@
+'use client';
+
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import { 
+  LANGUAGES, 
+  getPreferredLanguage, 
+  setPreferredLanguage as setStoredLanguage,
+  Language
+} from '@/services/languageService';
+
+// Define the types for our translations
+interface LanguageTranslation {
+  [key: string]: string | NestedTranslation;
+}
+
+interface NestedTranslation {
+  [key: string]: string;
+}
+
+interface Translations {
+  [key: string]: LanguageTranslation;
+}
+
+// Sample translations for demonstration
+const translations: Translations = {
+  en: {
+    welcome: 'Welcome to Iwanyu',
+    products: 'Products',
+    vendors: 'Vendors',
+    cart: 'Cart',
+    login: 'Login',
+    register: 'Register',
+    account: 'My Account',
+    orders: 'My Orders',
+    logout: 'Logout',
+    search: 'Search',
+    addToCart: 'Add to Cart',
+    buyNow: 'Buy Now',
+    outOfStock: 'Out of Stock',
+    categories: 'Categories',
+    featuredProducts: 'Featured Products',
+    newArrivals: 'New Arrivals',
+    bestSellers: 'Best Sellers',
+    viewAll: 'View All',
+    home: 'Home',
+    adminDashboard: 'Admin Dashboard',
+    vendorDashboard: 'Vendor Dashboard',
+    checkout: 'Checkout',
+    payment: 'Payment',
+    shipping: 'Shipping',
+    orderSummary: 'Order Summary',
+    orderHistory: 'Order History',
+    orderDetails: 'Order Details',
+    orderStatus: 'Order Status',
+    orderDate: 'Order Date',
+    orderTotal: 'Order Total',
+    orderNumber: 'Order Number',
+    shippingAddress: 'Shipping Address',
+    billingAddress: 'Billing Address',
+    paymentMethod: 'Payment Method',
+    subtotal: 'Subtotal',
+    tax: 'Tax',
+    shippingCost: 'Shipping Cost',
+    discount: 'Discount',
+    total: 'Total',
+    proceedToCheckout: 'Proceed to Checkout',
+    continueShopping: 'Continue Shopping',
+    emptyCart: 'Your cart is empty',
+    productDetails: 'Product Details',
+    productDescription: 'Product Description',
+    productSpecifications: 'Product Specifications',
+    productReviews: 'Product Reviews',
+    relatedProducts: 'Related Products',
+    quantity: 'Quantity',
+    price: 'Price',
+    inStock: 'In Stock',
+    becomeVendor: 'Become a Vendor',
+    contactUs: 'Contact Us',
+    aboutUs: 'About Us',
+    termsAndConditions: 'Terms and Conditions',
+    privacyPolicy: 'Privacy Policy',
+    faq: 'FAQ',
+    help: 'Help',
+    settings: 'Settings',
+    language: 'Language',
+    currency: 'Currency',
+    profile: 'Profile',
+    wishlist: 'Wishlist',
+    notifications: 'Notifications',
+    save: 'Save',
+    cancel: 'Cancel',
+    delete: 'Delete',
+    edit: 'Edit',
+    update: 'Update',
+    submit: 'Submit',
+    confirm: 'Confirm',
+    apply: 'Apply',
+    filter: 'Filter',
+    sort: 'Sort',
+    sortBy: 'Sort By',
+    priceRange: 'Price Range',
+    rating: 'Rating',
+    reviews: 'Reviews',
+    writeReview: 'Write a Review',
+    thankYou: 'Thank You',
+    orderConfirmed: 'Your order has been confirmed',
+    trackOrder: 'Track Order',
+    signupSuccess: 'Sign up successful',
+    loginSuccess: 'Login successful',
+    logoutSuccess: 'Logout successful',
+    passwordReset: 'Password Reset',
+    forgotPassword: 'Forgot your password?',
+    resetPassword: 'Reset Password',
+    changePassword: 'Change Password',
+    currentPassword: 'Current Password',
+    newPassword: 'New Password',
+    confirmPassword: 'Confirm Password',
+    emailAddress: 'Email Address',
+    phoneNumber: 'Phone Number',
+    firstName: 'First Name',
+    lastName: 'Last Name',
+    username: 'Username',
+    address: 'Address',
+    city: 'City',
+    province: 'Province',
+    country: 'Country',
+    postalCode: 'Postal Code',
+    rwandaCountry: 'Rwanda',
+    heroTitle: 'Shop Local, Support Rwandan Vendors',
+    heroSubtitle: 'Browse a wide range of products and experience seamless shopping with our vendor marketplace.',
+    startShopping: 'Start Shopping',
+    whyChooseUs: 'Why Choose Iwanyu?',
+    curatedProducts: 'Curated Products',
+    curatedProductsDesc: 'Discover top items from local vendors with stunning visuals and detailed descriptions.',
+    vendorCommunity: 'Vendor Community',
+    vendorCommunityDesc: 'Meet our featured sellers and their inspiring stories from across Rwanda.',
+    secureCheckout: 'Secure Checkout',
+    secureCheckoutDesc: 'Enjoy safe and secure payments with Flutterwave integration for a smooth experience.',
+    productName: 'Product Name',
+    vendorName: 'Vendor Name',
+    footerTagline: 'Your premier marketplace for Rwandan products and vendors.',
+    quickLinks: 'Quick Links',
+    legal: 'Legal',
+    termsOfService: 'Terms of Service',
+    shippingPolicy: 'Shipping Policy',
+    returnsRefunds: 'Returns & Refunds',
+    allRightsReserved: 'All rights reserved.',
+    designedFor: 'Designed and developed for the Rwandan market.',
+    vendorPricing: 'Vendor Pricing',
+    loginPage: {
+      signInToAccount: 'Sign in to your account',
+      or: 'Or',
+      createNewAccount: 'create a new account',
+      password: 'Password',
+      rememberMe: 'Remember me',
+      signIn: 'Sign in',
+      signingIn: 'Signing in...',
+      fillAllFields: 'Please fill in all fields',
+      validEmailRequired: 'Please enter a valid email address',
+    },
+    registerPage: {
+      createAccountBtn: 'Create Account',
+      createAccountTitle: 'Create your account',
+      alreadyHaveAccount: 'Already have an account?',
+      confirmPassword: 'Confirm Password',
+      creatingAccount: 'Creating Account...',
+      passwordMinLength: 'Password must be at least 6 characters long',
+      passwordsDoNotMatch: 'Passwords do not match',
+      registrationFailed: 'Registration failed',
+      bySigningUp: 'By signing up, you agree to our',
+      and: 'and'
+    },
+    productsPage: {
+      productListings: 'Product Listings',
+      allCategories: 'All Categories',
+      clothing: 'Clothing',
+      electronics: 'Electronics',
+      homeAndGarden: 'Home & Garden',
+      foodAndBeverages: 'Food & Beverages',
+      filter: 'Filter',
+      previous: 'Previous',
+      next: 'Next',
+      productName: 'Product Name',
+      vendorName: 'Vendor Name'
+    },
+    productDetailPage: {
+      error: 'Error',
+      goBack: 'Go Back',
+      notFound: 'Product Not Found',
+      couldNotFind: 'Could not find the requested product.',
+      noImage: 'No image available',
+      reviews: 'reviews',
+      description: 'Description',
+      vendor: 'Vendor',
+      availability: 'Availability',
+      available: 'available',
+      addingToCart: 'Adding...',
+      wishlist: 'Wishlist',
+      share: 'Share',
+      customerReviews: 'Customer Reviews',
+      verifiedPurchase: 'Verified Purchase',
+      noReviews: 'No reviews yet. Be the first to review this product!',
+      writeReview: 'Write a Review',
+      youMayAlsoLike: 'You May Also Like',
+      relatedProduct: 'Related Product',
+      failedToLoad: 'Failed to load product',
+      added: 'Added',
+      toCart: 'to cart',
+      failedToAddToCart: 'Failed to add to cart. Please try again.',
+      name: 'Product Name',
+      price: 'Price',
+      descriptionText: 'Description text',
+      vendorName: 'Vendor Name',
+      reviewText: 'Review text',
+      addToCart: 'Add to Cart',
+      outOfStock: 'Out of Stock',
+    },
+    becomeVendorPage: {
+      title: 'Become a Vendor',
+      subtitle: 'Join our marketplace and start selling your products today',
+      applicationStep: 'Application',
+      subscriptionStep: 'Subscription',
+      paymentStep: 'Payment',
+      confirmationStep: 'Confirmation',
+      storeInformation: 'Store Information',
+      storeName: 'Store Name',
+      storeCategory: 'Store Category',
+      storeDescription: 'Store Description',
+      descriptionMinimum: '{length}/50 characters minimum',
+      contactInformation: 'Contact Information',
+      contactName: 'Contact Name',
+      accountUsername: 'This is your account username',
+      emailAddress: 'Email Address',
+      accountEmail: 'This is your account email',
+      phoneNumber: 'Phone Number',
+      businessAddress: 'Business Address',
+      termsAndConditions: 'Vendor Terms and Conditions',
+      termsDescription: 'By submitting this application, you agree to our vendor terms and conditions. This includes a commission fee on sales, adherence to our community guidelines, and maintaining quality standards for your products.',
+      agreeTerms: 'I agree to the vendor terms and conditions',
+      continueToSubscription: 'Continue to Subscription',
+      submittingApplication: 'Submitting Application...',
+      chooseSubscription: 'Choose a Subscription Plan',
+      subscriptionDescription: 'Select a subscription plan that best fits your business needs. You can upgrade or downgrade your plan at any time.',
+      basicPlan: 'Basic',
+      basicDescription: 'For small businesses',
+      premiumPlan: 'Premium',
+      premiumDescription: 'For growing businesses',
+      enterprisePlan: 'Enterprise',
+      enterpriseDescription: 'For large businesses',
+      popular: 'Popular',
+      month: '/month',
+      selectPlan: 'Select Plan',
+      selected: 'Selected',
+      back: 'Back',
+      continueToPayment: 'Continue to Payment',
+      paymentInformation: 'Payment Information',
+      paymentDescription: 'Please provide your payment details to complete your subscription. Your card will be charged immediately.',
+      orderSummary: 'Order Summary',
+      plan: 'Plan:',
+      billing: 'Billing:',
+      monthly: 'Monthly',
+      total: 'Total:',
+      cardNumber: 'Card Number',
+      cardholderName: 'Cardholder Name',
+      expiryDate: 'Expiry Date',
+      cvv: 'CVV',
+      processingPayment: 'Processing Payment...',
+      completeSubscription: 'Complete Subscription',
+      applicationSuccessful: 'Application Successful!',
+      applicationSuccessMessage: 'Your vendor application has been approved and your subscription is now active.',
+      redirectMessage: 'You will be redirected to your vendor dashboard in a few seconds...',
+      selectCategory: 'Please select a category',
+    },
+  },
+  fr: {
+    welcome: 'Bienvenue à Iwanyu',
+    products: 'Produits',
+    vendors: 'Vendeurs',
+    cart: 'Panier',
+    login: 'Connexion',
+    register: 'S\'inscrire',
+    account: 'Mon Compte',
+    orders: 'Mes Commandes',
+    logout: 'Déconnexion',
+    search: 'Rechercher',
+    addToCart: 'Ajouter au Panier',
+    buyNow: 'Acheter Maintenant',
+    outOfStock: 'Rupture de Stock',
+    categories: 'Catégories',
+    featuredProducts: 'Produits en Vedette',
+    newArrivals: 'Nouveautés',
+    bestSellers: 'Meilleures Ventes',
+    viewAll: 'Voir Tout',
+    home: 'Accueil',
+    adminDashboard: 'Tableau de Bord Admin',
+    vendorDashboard: 'Tableau de Bord Vendeur',
+    checkout: 'Paiement',
+    payment: 'Paiement',
+    shipping: 'Livraison',
+    orderSummary: 'Récapitulatif de la Commande',
+    orderHistory: 'Historique des Commandes',
+    orderDetails: 'Détails de la Commande',
+    orderStatus: 'Statut de la Commande',
+    orderDate: 'Date de Commande',
+    orderTotal: 'Total de la Commande',
+    orderNumber: 'Numéro de Commande',
+    shippingAddress: 'Adresse de Livraison',
+    billingAddress: 'Adresse de Facturation',
+    paymentMethod: 'Moyen de Paiement',
+    subtotal: 'Sous-total',
+    tax: 'Taxe',
+    shippingCost: 'Frais de Livraison',
+    discount: 'Remise',
+    total: 'Total',
+    proceedToCheckout: 'Procéder au Paiement',
+    continueShopping: 'Continuer les Achats',
+    emptyCart: 'Votre panier est vide',
+    productDetails: 'Détails du Produit',
+    productDescription: 'Description du Produit',
+    productSpecifications: 'Spécifications du Produit',
+    productReviews: 'Avis sur le Produit',
+    relatedProducts: 'Produits Associés',
+    quantity: 'Quantité',
+    price: 'Prix',
+    inStock: 'En Stock',
+    becomeVendor: 'Devenir Vendeur',
+    contactUs: 'Contactez-nous',
+    aboutUs: 'À Propos de Nous',
+    termsAndConditions: 'Conditions Générales',
+    privacyPolicy: 'Politique de Confidentialité',
+    faq: 'FAQ',
+    help: 'Aide',
+    settings: 'Paramètres',
+    language: 'Langue',
+    currency: 'Devise',
+    profile: 'Profil',
+    wishlist: 'Liste de Souhaits',
+    notifications: 'Notifications',
+    save: 'Enregistrer',
+    cancel: 'Annuler',
+    delete: 'Supprimer',
+    edit: 'Modifier',
+    update: 'Mettre à Jour',
+    submit: 'Soumettre',
+    confirm: 'Confirmer',
+    apply: 'Appliquer',
+    filter: 'Filtrer',
+    sort: 'Trier',
+    sortBy: 'Trier Par',
+    priceRange: 'Fourchette de Prix',
+    rating: 'Évaluation',
+    reviews: 'Avis',
+    writeReview: 'Écrire un Avis',
+    thankYou: 'Merci',
+    orderConfirmed: 'Votre commande a été confirmée',
+    trackOrder: 'Suivre la Commande',
+    signupSuccess: 'Inscription réussie',
+    loginSuccess: 'Connexion réussie',
+    logoutSuccess: 'Déconnexion réussie',
+    passwordReset: 'Réinitialisation du Mot de Passe',
+    forgotPassword: 'Mot de Passe Oublié',
+    resetPassword: 'Réinitialiser le Mot de Passe',
+    changePassword: 'Changer le Mot de Passe',
+    currentPassword: 'Mot de Passe Actuel',
+    newPassword: 'Nouveau Mot de Passe',
+    confirmPassword: 'Confirmer le Mot de Passe',
+    emailAddress: 'Adresse Email',
+    phoneNumber: 'Numéro de Téléphone',
+    firstName: 'Prénom',
+    lastName: 'Nom',
+    username: 'Nom d\'utilisateur',
+    address: 'Adresse',
+    city: 'Ville',
+    province: 'Province',
+    country: 'Pays',
+    postalCode: 'Code Postal',
+    rwandaCountry: 'Rwanda',
+    heroTitle: 'Achetez Local, Soutenez les Vendeurs Rwandais',
+    heroSubtitle: 'Parcourez une large gamme de produits et profitez d\'un shopping fluide avec notre place de marché de vendeurs.',
+    startShopping: 'Commencer les Achats',
+    whyChooseUs: 'Pourquoi Choisir Iwanyu?',
+    curatedProducts: 'Produits Sélectionnés',
+    curatedProductsDesc: 'Découvrez les meilleurs articles des vendeurs locaux avec des visuels magnifiques et des descriptions détaillées.',
+    vendorCommunity: 'Communauté de Vendeurs',
+    vendorCommunityDesc: 'Rencontrez nos vendeurs en vedette et leurs histoires inspirantes de tout le Rwanda.',
+    secureCheckout: 'Paiement Sécurisé',
+    secureCheckoutDesc: 'Profitez de paiements sûrs et sécurisés avec l\'intégration de Flutterwave pour une expérience fluide.',
+    productName: 'Nom du Produit',
+    vendorName: 'Nom du Vendeur',
+    footerTagline: 'Votre place de marché principale pour les produits et vendeurs rwandais.',
+    quickLinks: 'Liens Rapides',
+    legal: 'Mentions Légales',
+    termsOfService: 'Conditions d\'Utilisation',
+    shippingPolicy: 'Politique de Livraison',
+    returnsRefunds: 'Retours & Remboursements',
+    allRightsReserved: 'Tous droits réservés.',
+    designedFor: 'Conçu et développé pour le marché rwandais.',
+    vendorPricing: 'Tarification Vendeur',
+    loginPage: {
+      signInToAccount: 'Connectez-vous à votre compte',
+      or: 'Ou',
+      createNewAccount: 'créer un nouveau compte',
+      password: 'Mot de passe',
+      rememberMe: 'Se souvenir de moi',
+      signIn: 'Se connecter',
+      signingIn: 'Connexion en cours...',
+      fillAllFields: 'Veuillez remplir tous les champs',
+      validEmailRequired: 'Veuillez entrer une adresse email valide',
+    },
+    registerPage: {
+      createAccountBtn: 'Créer un compte',
+      createAccountTitle: 'Créez votre compte',
+      alreadyHaveAccount: 'Vous avez déjà un compte?',
+      confirmPassword: 'Confirmer le mot de passe',
+      creatingAccount: 'Création du compte...',
+      passwordMinLength: 'Le mot de passe doit comporter au moins 6 caractères',
+      passwordsDoNotMatch: 'Les mots de passe ne correspondent pas',
+      registrationFailed: 'L\'inscription a échoué',
+      bySigningUp: 'En vous inscrivant, vous acceptez nos',
+      and: 'et'
+    },
+    productsPage: {
+      productListings: 'Liste des Produits',
+      allCategories: 'Toutes les Catégories',
+      clothing: 'Vêtements',
+      electronics: 'Électronique',
+      homeAndGarden: 'Maison & Jardin',
+      foodAndBeverages: 'Alimentation & Boissons',
+      filter: 'Filtrer',
+      previous: 'Précédent',
+      next: 'Suivant',
+      productName: 'Nom du Produit',
+      vendorName: 'Nom du Vendeur'
+    },
+    productDetailPage: {
+      error: 'Erreur',
+      goBack: 'Retour',
+      notFound: 'Produit Non Trouvé',
+      couldNotFind: 'Impossible de trouver le produit demandé.',
+      noImage: 'Aucune image disponible',
+      reviews: 'avis',
+      description: 'Description',
+      vendor: 'Vendeur',
+      availability: 'Disponibilité',
+      available: 'disponible',
+      addingToCart: 'Ajout en cours...',
+      wishlist: 'Liste de Souhaits',
+      share: 'Partager',
+      customerReviews: 'Avis Clients',
+      verifiedPurchase: 'Achat Vérifié',
+      noReviews: 'Pas encore d\'avis. Soyez le premier à évaluer ce produit!',
+      writeReview: 'Écrire un Avis',
+      youMayAlsoLike: 'Vous Pourriez Aussi Aimer',
+      relatedProduct: 'Produit Associé',
+      failedToLoad: 'Échec du chargement du produit',
+      added: 'Ajouté',
+      toCart: 'au panier',
+      failedToAddToCart: 'Échec de l\'ajout au panier. Veuillez réessayer.',
+      name: 'Nom du Produit',
+      price: 'Prix',
+      descriptionText: 'Texte de description',
+      vendorName: 'Nom du Vendeur',
+      reviewText: 'Texte d\'avis',
+      addToCart: 'Ajouter au Panier',
+      outOfStock: 'Rupture de Stock',
+    },
+    becomeVendorPage: {
+      title: 'Devenir Vendeur',
+      subtitle: 'Rejoignez notre marketplace et commencez à vendre vos produits dès aujourd\'hui',
+      applicationStep: 'Candidature',
+      subscriptionStep: 'Abonnement',
+      paymentStep: 'Paiement',
+      confirmationStep: 'Confirmation',
+      storeInformation: 'Informations sur la Boutique',
+      storeName: 'Nom de la Boutique',
+      storeCategory: 'Catégorie de la Boutique',
+      storeDescription: 'Description de la Boutique',
+      descriptionMinimum: '{length}/50 caractères minimum',
+      contactInformation: 'Informations de Contact',
+      contactName: 'Nom du Contact',
+      accountUsername: 'Ceci est votre nom d\'utilisateur',
+      emailAddress: 'Adresse Email',
+      accountEmail: 'Ceci est l\'email de votre compte',
+      phoneNumber: 'Numéro de Téléphone',
+      businessAddress: 'Adresse Professionnelle',
+      termsAndConditions: 'Conditions Générales des Vendeurs',
+      termsDescription: 'En soumettant cette candidature, vous acceptez nos conditions générales pour les vendeurs. Cela inclut une commission sur les ventes, le respect de nos directives communautaires et le maintien de normes de qualité pour vos produits.',
+      agreeTerms: 'J\'accepte les conditions générales des vendeurs',
+      continueToSubscription: 'Continuer vers l\'Abonnement',
+      submittingApplication: 'Soumission de la Candidature...',
+      chooseSubscription: 'Choisissez un Plan d\'Abonnement',
+      subscriptionDescription: 'Sélectionnez un plan d\'abonnement qui correspond le mieux à vos besoins commerciaux. Vous pouvez passer à un niveau supérieur ou inférieur à tout moment.',
+      basicPlan: 'Basique',
+      basicDescription: 'Pour les petites entreprises',
+      premiumPlan: 'Premium',
+      premiumDescription: 'Pour les entreprises en croissance',
+      enterprisePlan: 'Entreprise',
+      enterpriseDescription: 'Pour les grandes entreprises',
+      popular: 'Populaire',
+      month: '/mois',
+      selectPlan: 'Sélectionner',
+      selected: 'Sélectionné',
+      back: 'Retour',
+      continueToPayment: 'Continuer vers le Paiement',
+      paymentInformation: 'Informations de Paiement',
+      paymentDescription: 'Veuillez fournir vos informations de paiement pour compléter votre abonnement. Votre carte sera débitée immédiatement.',
+      orderSummary: 'Récapitulatif de la Commande',
+      plan: 'Plan:',
+      billing: 'Facturation:',
+      monthly: 'Mensuelle',
+      total: 'Total:',
+      cardNumber: 'Numéro de Carte',
+      cardholderName: 'Nom du Titulaire',
+      expiryDate: 'Date d\'Expiration',
+      cvv: 'CVV',
+      processingPayment: 'Traitement du Paiement...',
+      completeSubscription: 'Compléter l\'Abonnement',
+      applicationSuccessful: 'Candidature Réussie !',
+      applicationSuccessMessage: 'Votre candidature de vendeur a été approuvée et votre abonnement est maintenant actif.',
+      redirectMessage: 'Vous serez redirigé vers votre tableau de bord vendeur dans quelques secondes...',
+      selectCategory: 'Veuillez sélectionner une catégorie',
+    },
+  },
+  rw: {
+    welcome: 'Murakaza neza kuri Iwanyu',
+    products: 'Ibicuruzwa',
+    vendors: 'Abacuruzi',
+    cart: 'Igitebo',
+    login: 'Kwinjira',
+    register: 'Kwiyandikisha',
+    account: 'Konti Yanjye',
+    orders: 'Ibyo Naguze',
+    logout: 'Gusohoka',
+    search: 'Gushakisha',
+    addToCart: 'Shyira mu Gitebo',
+    buyNow: 'Gura Ubu',
+    outOfStock: 'Ntibihari',
+    categories: 'Amatsinda',
+    featuredProducts: 'Ibicuruzwa Byatoranijwe',
+    newArrivals: 'Ibicuruzwa Bishya',
+    bestSellers: 'Ibicuruzwa Bisanzwe Bigurishwa Cyane',
+    viewAll: 'Reba Byose',
+    home: 'Ahabanza',
+    adminDashboard: 'Ikibaho cy\'Umuyobozi',
+    vendorDashboard: 'Ikibaho cy\'Umucuruzi',
+    checkout: 'Kwishyura',
+    payment: 'Ubwishyu',
+    shipping: 'Kohereza',
+    orderSummary: 'Incamake y\'Ibyo Waguze',
+    orderHistory: 'Amateka y\'Ibyo Waguze',
+    orderDetails: 'Ibisobanuro by\'Ibyo Waguze',
+    orderStatus: 'Uko Ibyo Waguze Bihagaze',
+    orderDate: 'Itariki Waguzeho',
+    orderTotal: 'Igiteranyo cy\'Ibyo Waguze',
+    orderNumber: 'Nomero y\'Ibyo Waguze',
+    shippingAddress: 'Aderesi yo Kohereza',
+    billingAddress: 'Aderesi yo Kwishyura',
+    paymentMethod: 'Uburyo bwo Kwishyura',
+    subtotal: 'Igiteranyo',
+    tax: 'Umusoro',
+    shippingCost: 'Ikiguzi cyo Kohereza',
+    discount: 'Igabanyirizwa',
+    total: 'Igiteranyo',
+    proceedToCheckout: 'Komeza Kwishyura',
+    continueShopping: 'Komeza Kugura',
+    emptyCart: 'Igitebo cyawe kirimo ubusa',
+    productDetails: 'Ibisobanuro by\'Igicuruzwa',
+    productDescription: 'Ibisobanuro by\'Igicuruzwa',
+    productSpecifications: 'Ibipimo by\'Igicuruzwa',
+    productReviews: 'Ibitekerezo ku Gicuruzwa',
+    relatedProducts: 'Ibicuruzwa Bifitanye Isano',
+    quantity: 'Ingano',
+    price: 'Igiciro',
+    inStock: 'Bihari',
+    becomeVendor: 'Ba Umucuruzi',
+    contactUs: 'Twandikire',
+    aboutUs: 'Ibyerekeye Twebwe',
+    termsAndConditions: 'Amabwiriza n\'Amategeko',
+    privacyPolicy: 'Politiki y\'Ibanga',
+    faq: 'Ibibazo Bikunze Kubazwa',
+    help: 'Ubufasha',
+    settings: 'Igenamiterere',
+    language: 'Ururimi',
+    currency: 'Ifaranga',
+    profile: 'Umwirondoro',
+    wishlist: 'Ibyo Nifuza',
+    notifications: 'Imenyesha',
+    save: 'Kubika',
+    cancel: 'Guhagarika',
+    delete: 'Gusiba',
+    edit: 'Guhindura',
+    update: 'Kuvugurura',
+    submit: 'Kohereza',
+    confirm: 'Kwemeza',
+    apply: 'Gukoresha',
+    filter: 'Kuyungurura',
+    sort: 'Gutondeka',
+    sortBy: 'Gutondeka Ukurikije',
+    priceRange: 'Igiciro Hagati ya',
+    rating: 'Amanota',
+    reviews: 'Ibitekerezo',
+    writeReview: 'Andika Igitekerezo',
+    thankYou: 'Urakoze',
+    orderConfirmed: 'Ibyo waguze byemejwe',
+    trackOrder: 'Kurikirana Ibyo Waguze',
+    signupSuccess: 'Kwiyandikisha byagenze neza',
+    loginSuccess: 'Kwinjira byagenze neza',
+    logoutSuccess: 'Gusohoka byagenze neza',
+    passwordReset: 'Guhindura Ijambo ry\'Ibanga',
+    forgotPassword: 'Wibagiwe Ijambo ry\'Ibanga',
+    resetPassword: 'Guhindura Ijambo ry\'Ibanga',
+    changePassword: 'Guhindura Ijambo ry\'Ibanga',
+    currentPassword: 'Ijambo ry\'Ibanga rya Ubu',
+    newPassword: 'Ijambo ry\'Ibanga Rishya',
+    confirmPassword: 'Emeza Ijambo ry\'Ibanga',
+    emailAddress: 'Aderesi ya Imeyili',
+    phoneNumber: 'Nomero ya Telefoni',
+    firstName: 'Izina',
+    lastName: 'Izina ry\'Umuryango',
+    username: 'Izina ry\'Ukoresha',
+    address: 'Aderesi',
+    city: 'Umujyi',
+    province: 'Intara',
+    country: 'Igihugu',
+    postalCode: 'Kode y\'Iposita',
+    rwandaCountry: 'Rwanda',
+    heroTitle: 'Gura Ibyo mu Rwanda, Shyigikira Abacuruzi b\'Abanyarwanda',
+    heroSubtitle: 'Reba ibicuruzwa byinshi kandi ufite uburyo bworoshye bwo kugura mu isoko ryacu ry\'abacuruzi.',
+    startShopping: 'Tangira Kugura',
+    whyChooseUs: 'Kuki Wahitamo Iwanyu?',
+    curatedProducts: 'Ibicuruzwa Byatoranijwe',
+    curatedProductsDesc: 'Reba ibicuruzwa byiza by\'abacuruzi bo mu Rwanda bifite amafoto meza n\'ibisobanuro birambuye.',
+    vendorCommunity: 'Umuryango w\'Abacuruzi',
+    vendorCommunityDesc: 'Uzuze abacuruzi bacu n\'inkuru zabo zishimishije ziva mu Rwanda hose.',
+    secureCheckout: 'Kwishyura mu Mutekano',
+    secureCheckoutDesc: 'Ishyura mu mutekano ukoresheje Flutterwave kugira ngo ubone uburyo bworoshye.',
+    productName: 'Izina ry\'Igicuruzwa',
+    vendorName: 'Izina ry\'Umucuruzi',
+    footerTagline: 'Isoko ryawe rinini ry\'ibicuruzwa n\'abacuruzi b\'Abanyarwanda.',
+    quickLinks: 'Aho Ugera Vuba',
+    legal: 'Amategeko',
+    termsOfService: 'Amabwiriza yo Gukoresha',
+    shippingPolicy: 'Amabwiriza yo Kohereza',
+    returnsRefunds: 'Gusubiza n\'Amafaranga Asubizwa',
+    allRightsReserved: 'Uburenganzira bwose bwihariwe.',
+    designedFor: 'Byateguwe kandi byakozwe ku bw\'isoko ry\'u Rwanda.',
+    vendorPricing: 'Ibiciro by\'Abacuruzi',
+    loginPage: {
+      signInToAccount: 'Injira muri konti yawe',
+      or: 'Cyangwa',
+      createNewAccount: 'kora konti nshya',
+      password: 'Ijambo ry\'ibanga',
+      rememberMe: 'Unyibuke',
+      signIn: 'Injira',
+      signingIn: 'Kwinjira...',
+      fillAllFields: 'Nyamuneka uzuza ibisabwa byose',
+      validEmailRequired: 'Nyamuneka shyiramo imeyili ikora',
+    },
+    registerPage: {
+      createAccountBtn: 'Kora konti',
+      createAccountTitle: 'Kora konti yawe',
+      alreadyHaveAccount: 'Usanzwe ufite konti?',
+      confirmPassword: 'Emeza ijambo ry\'ibanga',
+      creatingAccount: 'Gukora konti...',
+      passwordMinLength: 'Ijambo ry\'ibanga rigomba kugira nibura inyuguti 6',
+      passwordsDoNotMatch: 'Amagambo y\'ibanga ntabwo ahura',
+      registrationFailed: 'Kwiyandikisha ntibyakunze',
+      bySigningUp: 'Mu kwiyandikisha, wemera',
+      and: 'na'
+    },
+    productsPage: {
+      productListings: 'Urutonde rw\'Ibicuruzwa',
+      allCategories: 'Amatsinda Yose',
+      clothing: 'Imyambaro',
+      electronics: 'Ibikoresho by\'Amashanyarazi',
+      homeAndGarden: 'Ibikoresho byo mu Rugo & Ubusitani',
+      foodAndBeverages: 'Ibiribwa & Ibinyobwa',
+      filter: 'Kuyungurura',
+      previous: 'Ibanza',
+      next: 'Ibikurikira',
+      productName: 'Izina ry\'Igicuruzwa',
+      vendorName: 'Izina ry\'Umucuruzi'
+    },
+    productDetailPage: {
+      error: 'Ikosa',
+      goBack: 'Gusubira Inyuma',
+      notFound: 'Igicuruzwa Ntigihari',
+      couldNotFind: 'Ntabwo dushoboye kubona igicuruzwa cyasabwe.',
+      noImage: 'Nta shusho ihari',
+      reviews: 'ibitekerezo',
+      description: 'Ibisobanuro',
+      vendor: 'Umucuruzi',
+      availability: 'Kuboneka',
+      available: 'bihari',
+      addingToCart: 'Kurimo gushyira...',
+      wishlist: 'Ibyo Nifuza',
+      share: 'Gusangiza',
+      customerReviews: 'Ibitekerezo by\'Abakiriya',
+      verifiedPurchase: 'Kugura Byemejwe',
+      noReviews: 'Nta bitekerezo biriho. Ba uwa mbere utanga igitekerezo kuri iki gicuruzwa!',
+      writeReview: 'Andika Igitekerezo',
+      youMayAlsoLike: 'Ushobora no Gukunda',
+      relatedProduct: 'Igicuruzwa Gifitanye Isano',
+      failedToLoad: 'Ntibyakunze gutangiza igicuruzwa',
+      added: 'Byashyizwemo',
+      toCart: 'mu gitebo',
+      failedToAddToCart: 'Ntibyakunze gushyira mu gitebo. Nyamuneka ongera ugerageze.',
+      name: 'Izina ry\'Igicuruzwa',
+      price: 'Igiciro',
+      descriptionText: 'Umwandiko w\'ibisobanuro',
+      vendorName: 'Izina ry\'Umucuruzi',
+      reviewText: 'Umwandiko w\'igitekerezo',
+      addToCart: 'Shyira mu Gitebo',
+      outOfStock: 'Ntibihari'
+    },
+    becomeVendorPage: {
+      title: 'Ba Umucuruzi',
+      subtitle: 'Joins our marketplace and start selling your products today',
+      applicationStep: 'Candidature',
+      subscriptionStep: 'Abonnement',
+      paymentStep: 'Paiement',
+      confirmationStep: 'Confirmation',
+      storeInformation: 'Informations sur la Boutique',
+      storeName: 'Nom de la Boutique',
+      storeCategory: 'Catégorie de la Boutique',
+      storeDescription: 'Description de la Boutique',
+      descriptionMinimum: '{length}/50 caractères minimum',
+      contactInformation: 'Informations de Contact',
+      contactName: 'Nom du Contact',
+      accountUsername: 'Ceci est votre nom d\'utilisateur',
+      emailAddress: 'Adresse Email',
+      accountEmail: 'Ceci est l\'email de votre compte',
+      phoneNumber: 'Numéro de Téléphone',
+      businessAddress: 'Adresse Professionnelle',
+      termsAndConditions: 'Conditions Générales des Vendeurs',
+      termsDescription: 'En soumettant cette candidature, vous acceptez nos conditions générales pour les vendeurs. Cela inclut une commission sur les ventes, le respect de nos directives communautaires et le maintien de normes de qualité pour vos produits.',
+      agreeTerms: 'J\'accepte les conditions générales des vendeurs',
+      continueToSubscription: 'Continuer vers l\'Abonnement',
+      submittingApplication: 'Soumission de la Candidature...',
+      chooseSubscription: 'Choisissez un Plan d\'Abonnement',
+      subscriptionDescription: 'Sélectionnez un plan d\'abonnement qui correspond le mieux à vos besoins commerciaux. Vous pouvez passer à un niveau supérieur ou inférieur à tout moment.',
+      basicPlan: 'Basique',
+      basicDescription: 'Pour les petites entreprises',
+      premiumPlan: 'Premium',
+      premiumDescription: 'Pour les entreprises en croissance',
+      enterprisePlan: 'Entreprise',
+      enterpriseDescription: 'Pour les grandes entreprises',
+      popular: 'Populaire',
+      month: '/mois',
+      selectPlan: 'Sélectionner',
+      selected: 'Sélectionné',
+      back: 'Retour',
+      continueToPayment: 'Continuer vers le Paiement',
+      paymentInformation: 'Informations de Paiement',
+      paymentDescription: 'Veuillez fournir vos informations de paiement pour compléter votre abonnement. Votre carte sera débitée immédiatement.',
+      orderSummary: 'Récapitulatif de la Commande',
+      plan: 'Plan:',
+      billing: 'Facturation:',
+      monthly: 'Mensuelle',
+      total: 'Total:',
+      cardNumber: 'Numéro de Carte',
+      cardholderName: 'Nom du Titulaire',
+      expiryDate: 'Date d\'Expiration',
+      cvv: 'CVV',
+      processingPayment: 'Traitement du Paiement...',
+      completeSubscription: 'Compléter l\'Abonnement',
+      applicationSuccessful: 'Candidature Réussie !',
+      applicationSuccessMessage: 'Votre candidature de vendeur a été approuvée et votre abonnement est maintenant actif.',
+      redirectMessage: 'Vous serez redirigé vers votre tableau de bord vendeur dans quelques secondes...',
+      selectCategory: 'Veuillez sélectionner une catégorie',
+    },
+  },
+  sw: {
+    welcome: 'Karibu kwenye Iwanyu',
+    products: 'Bidhaa',
+    vendors: 'Wauzaji',
+    cart: 'Kikapu',
+    login: 'Ingia',
+    register: 'Jisajili',
+    account: 'Akaunti Yangu',
+    orders: 'Maagizo Yangu',
+    logout: 'Toka',
+    search: 'Tafuta',
+    addToCart: 'Ongeza kwenye Kikapu',
+    buyNow: 'Nunua Sasa',
+    outOfStock: 'Hakuna Hisa',
+    categories: 'Jamii',
+    featuredProducts: 'Bidhaa Zilizoangaziwa',
+    newArrivals: 'Bidhaa Mpya',
+    bestSellers: 'Bidhaa Zinazouza Zaidi',
+    viewAll: 'Ona Zote',
+    home: 'Nyumbani',
+    adminDashboard: 'Dashibodi ya Msimamizi',
+    vendorDashboard: 'Dashibodi ya Muuzaji',
+    checkout: 'Malipo',
+    payment: 'Malipo',
+    shipping: 'Usafirishaji',
+    orderSummary: 'Muhtasari wa Agizo',
+    orderHistory: 'Historia ya Maagizo',
+    orderDetails: 'Maelezo ya Agizo',
+    orderStatus: 'Hali ya Agizo',
+    orderDate: 'Tarehe ya Agizo',
+    orderTotal: 'Jumla ya Agizo',
+    orderNumber: 'Nambari ya Agizo',
+    shippingAddress: 'Anwani ya Usafirishaji',
+    billingAddress: 'Anwani ya Malipo',
+    paymentMethod: 'Njia ya Malipo',
+    subtotal: 'Jumla ndogo',
+    tax: 'Kodi',
+    shippingCost: 'Gharama ya Usafirishaji',
+    discount: 'Punguzo',
+    total: 'Jumla',
+    proceedToCheckout: 'Endelea kwa Malipo',
+    continueShopping: 'Endelea Kununua',
+    emptyCart: 'Kikapu chako ni tupu',
+    productDetails: 'Maelezo ya Bidhaa',
+    productDescription: 'Maelezo ya Bidhaa',
+    productSpecifications: 'Vipimo vya Bidhaa',
+    productReviews: 'Maoni ya Bidhaa',
+    relatedProducts: 'Bidhaa Zinazohusiana',
+    quantity: 'Kiasi',
+    price: 'Bei',
+    inStock: 'Ipo Stoki',
+    becomeVendor: 'Kuwa Muuzaji',
+    contactUs: 'Wasiliana Nasi',
+    aboutUs: 'Kuhusu Sisi',
+    termsAndConditions: 'Sheria na Masharti',
+    privacyPolicy: 'Sera ya Faragha',
+    faq: 'Maswali Yanayoulizwa Mara kwa Mara',
+    help: 'Msaada',
+    settings: 'Mipangilio',
+    language: 'Lugha',
+    currency: 'Sarafu',
+    profile: 'Wasifu',
+    wishlist: 'Orodha ya Matamanio',
+    notifications: 'Arifa',
+    save: 'Hifadhi',
+    cancel: 'Ghairi',
+    delete: 'Futa',
+    edit: 'Hariri',
+    update: 'Sasisha',
+    submit: 'Wasilisha',
+    confirm: 'Thibitisha',
+    apply: 'Tumia',
+    filter: 'Chuja',
+    sort: 'Panga',
+    sortBy: 'Panga Kwa',
+    priceRange: 'Kipimo cha Bei',
+    rating: 'Ukadiriaji',
+    reviews: 'Maoni',
+    writeReview: 'Andika Maoni',
+    thankYou: 'Asante',
+    orderConfirmed: 'Agizo lako limethibitishwa',
+    trackOrder: 'Fuatilia Agizo',
+    signupSuccess: 'Usajili umefanikiwa',
+    loginSuccess: 'Kuingia kumefanikiwa',
+    logoutSuccess: 'Kutoka kumefanikiwa',
+    passwordReset: 'Kuweka upya Nenosiri',
+    forgotPassword: 'Umesahau Nenosiri',
+    resetPassword: 'Weka upya Nenosiri',
+    changePassword: 'Badilisha Nenosiri',
+    currentPassword: 'Nenosiri la Sasa',
+    newPassword: 'Nenosiri Jipya',
+    confirmPassword: 'Thibitisha Nenosiri',
+    emailAddress: 'Anwani ya Barua Pepe',
+    phoneNumber: 'Nambari ya Simu',
+    firstName: 'Jina la Kwanza',
+    lastName: 'Jina la Familia',
+    username: 'Jina la Mtumiaji',
+    address: 'Anwani',
+    city: 'Mji',
+    province: 'Mkoa',
+    country: 'Nchi',
+    postalCode: 'Msimbo wa Posta',
+    rwandaCountry: 'Rwanda',
+    heroTitle: 'Nunua Bidhaa za Ndani, Saidia Wauzaji wa Rwanda',
+    heroSubtitle: 'Angalia bidhaa nyingi na upate ununuzi rahisi kupitia soko letu la wauzaji.',
+    startShopping: 'Anza Ununuzi',
+    whyChooseUs: 'Kwa Nini Uchague Iwanyu?',
+    curatedProducts: 'Bidhaa Zilizochaguliwa',
+    curatedProductsDesc: 'Gundua bidhaa bora kutoka kwa wauzaji wa ndani zenye picha nzuri na maelezo ya kina.',
+    vendorCommunity: 'Jumuiya ya Wauzaji',
+    vendorCommunityDesc: 'Kutana na wauzaji wetu maarufu na hadithi zao za kuvutia kutoka Rwanda nzima.',
+    secureCheckout: 'Malipo Salama',
+    secureCheckoutDesc: 'Furahia malipo salama na yenye usalama kupitia Flutterwave kwa uzoefu laini.',
+    productName: 'Jina la Bidhaa',
+    vendorName: 'Jina la Muuzaji',
+    footerTagline: 'Soko lako kuu la bidhaa na wauzaji wa Rwanda.',
+    quickLinks: 'Viungo vya Haraka',
+    legal: 'Kisheria',
+    termsOfService: 'Masharti ya Huduma',
+    shippingPolicy: 'Sera ya Usafirishaji',
+    returnsRefunds: 'Marejesho na Pesa',
+    allRightsReserved: 'Haki zote zimehifadhiwa.',
+    designedFor: 'Imeundwa na kutengenezwa kwa ajili ya soko la Rwanda.',
+    vendorPricing: 'Bei za Muuzaji',
+    loginPage: {
+      signInToAccount: 'Ingia kwenye akaunti yako',
+      or: 'Au',
+      createNewAccount: 'fungua akaunti mpya',
+      password: 'Nenosiri',
+      rememberMe: 'Nikumbuke',
+      signIn: 'Ingia',
+      signingIn: 'Inaingia...',
+      fillAllFields: 'Tafadhali jaza sehemu zote',
+      validEmailRequired: 'Tafadhali ingiza barua pepe halali',
+    },
+    registerPage: {
+      createAccountBtn: 'Fungua Akaunti',
+      createAccountTitle: 'Fungua akaunti yako',
+      alreadyHaveAccount: 'Una akaunti tayari?',
+      confirmPassword: 'Thibitisha Nenosiri',
+      creatingAccount: 'Inaunda Akaunti...',
+      passwordMinLength: 'Nenosiri lazima liwe na herufi 6 au zaidi',
+      passwordsDoNotMatch: 'Manenosiri hayalingani',
+      registrationFailed: 'Usajili umeshindwa',
+      bySigningUp: 'Kwa kujisajili, unakubali',
+      and: 'na'
+    },
+    productsPage: {
+      productListings: 'Orodha ya Bidhaa',
+      allCategories: 'Jamii Zote',
+      clothing: 'Mavazi',
+      electronics: 'Elektroniki',
+      homeAndGarden: 'Nyumbani & Bustani',
+      foodAndBeverages: 'Chakula & Vinywaji',
+      filter: 'Chuja',
+      previous: 'Iliyotangulia',
+      next: 'Inayofuata',
+      productName: 'Jina la Bidhaa',
+      vendorName: 'Jina la Muuzaji'
+    },
+    productDetailPage: {
+      error: 'Hitilafu',
+      goBack: 'Rudi Nyuma',
+      notFound: 'Bidhaa Haijapatikana',
+      couldNotFind: 'Haikuweza kupata bidhaa iliyoombwa.',
+      noImage: 'Hakuna picha inayopatikana',
+      reviews: 'maoni',
+      description: 'Maelezo',
+      vendor: 'Muuzaji',
+      availability: 'Upatikanaji',
+      available: 'zinapatikana',
+      addingToCart: 'Inaongeza...',
+      wishlist: 'Orodha ya Matamanio',
+      share: 'Shiriki',
+      customerReviews: 'Maoni ya Wateja',
+      verifiedPurchase: 'Ununuzi Uliothibitishwa',
+      noReviews: 'Hakuna maoni bado. Kuwa wa kwanza kutoa maoni juu ya bidhaa hii!',
+      writeReview: 'Andika Maoni',
+      youMayAlsoLike: 'Unaweza Pia Kupenda',
+      relatedProduct: 'Bidhaa Zinazohusiana',
+      failedToLoad: 'Imeshindwa kupakia bidhaa',
+      added: 'Imeongezwa',
+      toCart: 'kwenye kikapu',
+      failedToAddToCart: 'Imeshindwa kuongeza kwenye kikapu. Tafadhali jaribu tena.',
+      name: 'Jina la Bidhaa',
+      price: 'Bei',
+      descriptionText: 'Maandishi ya maelezo',
+      vendorName: 'Jina la Muuzaji',
+      reviewText: 'Maandishi ya maoni',
+      addToCart: 'Ongeza kwenye Kikapu',
+      outOfStock: 'Haipatikani'
+    },
+    becomeVendorPage: {
+      title: 'Kuwa Muuzaji',
+      subtitle: 'Join our marketplace and start selling your products today',
+      applicationStep: 'Candidature',
+      subscriptionStep: 'Abonnement',
+      paymentStep: 'Paiement',
+      confirmationStep: 'Confirmation',
+      storeInformation: 'Informations sur la Boutique',
+      storeName: 'Nom de la Boutique',
+      storeCategory: 'Catégorie de la Boutique',
+      storeDescription: 'Description de la Boutique',
+      descriptionMinimum: '{length}/50 caractères minimum',
+      contactInformation: 'Informations de Contact',
+      contactName: 'Nom du Contact',
+      accountUsername: 'Ceci est votre nom d\'utilisateur',
+      emailAddress: 'Adresse Email',
+      accountEmail: 'Ceci est l\'email de votre compte',
+      phoneNumber: 'Numéro de Téléphone',
+      businessAddress: 'Adresse Professionnelle',
+      termsAndConditions: 'Conditions Générales des Vendeurs',
+      termsDescription: 'En soumettant cette candidature, vous acceptez nos conditions générales pour les vendeurs. Cela inclut une commission sur les ventes, le respect de nos directives communautaires et le maintien de normes de qualité pour vos produits.',
+      agreeTerms: 'J\'accepte les conditions générales des vendeurs',
+      continueToSubscription: 'Continuer vers l\'Abonnement',
+      submittingApplication: 'Soumission de la Candidature...',
+      chooseSubscription: 'Choisissez un Plan d\'Abonnement',
+      subscriptionDescription: 'Sélectionnez un plan d\'abonnement qui correspond le mieux à vos besoins commerciaux. Vous pouvez passer à un niveau supérieur ou inférieur à tout moment.',
+      basicPlan: 'Basique',
+      basicDescription: 'Pour les petites entreprises',
+      premiumPlan: 'Premium',
+      premiumDescription: 'Pour les entreprises en croissance',
+      enterprisePlan: 'Entreprise',
+      enterpriseDescription: 'Pour les grandes entreprises',
+      popular: 'Populaire',
+      month: '/mois',
+      selectPlan: 'Sélectionner',
+      selected: 'Sélectionné',
+      back: 'Retour',
+      continueToPayment: 'Continuer vers le Paiement',
+      paymentInformation: 'Informations de Paiement',
+      paymentDescription: 'Veuillez fournir vos informations de paiement pour compléter votre abonnement. Votre carte sera débitée immédiatement.',
+      orderSummary: 'Récapitulatif de la Commande',
+      plan: 'Plan:',
+      billing: 'Facturation:',
+      monthly: 'Mensuelle',
+      total: 'Total:',
+      cardNumber: 'Numéro de Carte',
+      cardholderName: 'Nom du Titulaire',
+      expiryDate: 'Date d\'Expiration',
+      cvv: 'CVV',
+      processingPayment: 'Traitement du Paiement...',
+      completeSubscription: 'Compléter l\'Abonnement',
+      applicationSuccessful: 'Candidature Réussie !',
+      applicationSuccessMessage: 'Votre candidature de vendeur a été approuvée et votre abonnement est maintenant actif.',
+      redirectMessage: 'Vous serez redirigé vers votre tableau de bord vendeur dans quelques secondes...',
+      selectCategory: 'Veuillez sélectionner une catégorie',
+    },
+  }
+};
+
+// Language context type
+interface LanguageContextType {
+  currentLanguage: string;
+  setLanguage: (language: string) => void;
+  t: (key: string) => string;
+  getLanguageByCode: (code: string) => Language | undefined;
+  getAllLanguages: () => Language[];
+  isLanguageChanging: boolean;
+}
+
+// Create the context
+const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
+
+// Provider props
+interface LanguageProviderProps {
+  children: ReactNode;
+}
+
+// Language provider component
+export const LanguageProvider: React.FC<LanguageProviderProps> = ({ children }) => {
+  const [currentLanguage, setCurrentLanguage] = useState<string>('en');
+  const [isLanguageChanging, setIsLanguageChanging] = useState<boolean>(false);
+  
+  // Initialize language on mount
+  useEffect(() => {
+    const storedLanguage = getPreferredLanguage();
+    setCurrentLanguage(storedLanguage);
+    
+    // Set HTML attributes for language-specific styling
+    if (typeof document !== 'undefined') {
+      document.documentElement.lang = storedLanguage;
+      document.documentElement.setAttribute('data-language', storedLanguage);
+      
+      // Add language transition class to body
+      document.body.classList.add('language-transition');
+    }
+    
+    // Listen for storage changes (for cross-tab synchronization)
+    const handleStorageChange = (event: StorageEvent) => {
+      if (event.key === 'preferredLanguage' && event.newValue && event.newValue !== currentLanguage) {
+        setCurrentLanguage(event.newValue);
+        
+        // Update HTML attributes
+        if (typeof document !== 'undefined') {
+          document.documentElement.lang = event.newValue;
+          document.documentElement.setAttribute('data-language', event.newValue);
+        }
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, []);
+  
+  // Set language function with animation
+  const setLanguage = useCallback((code: string) => {
+    if (!Object.keys(translations).includes(code)) {
+      console.error(`Language ${code} is not supported`);
+      return;
+    }
+    
+    // Set changing state to trigger animations
+    setIsLanguageChanging(true);
+    
+    // Update language state
+    setCurrentLanguage(code);
+    setStoredLanguage(code);
+    
+    // Update HTML attributes for language-specific styling
+    if (typeof document !== 'undefined') {
+      document.documentElement.lang = code;
+      document.documentElement.setAttribute('data-language', code);
+      
+      // Dispatch a custom event that components can listen for
+      const event = new CustomEvent('languageChanged', { 
+        detail: { language: code, previousLanguage: currentLanguage } 
+      });
+      document.dispatchEvent(event);
+      
+      // Reset language changing state after animation completes
+      setTimeout(() => {
+        setIsLanguageChanging(false);
+      }, 500);
+    }
+  }, [currentLanguage]);
+  
+  // Function to get translation for a key
+  const t = useCallback((key: string): string => {
+    // Split the key by dot to handle nested objects
+    const keys = key.split('.');
+    
+    // If language doesn't exist, fall back to English
+    const currentTranslations = translations[currentLanguage] || translations['en'];
+    
+    if (keys.length === 1) {
+      // Simple key
+      const translation = currentTranslations[key];
+      if (typeof translation === 'string') {
+        return translation;
+      } else if (translation && typeof translation === 'object') {
+        // If it's an object, we can't return it as a string
+        console.warn(`Translation key "${key}" is an object, not a string`);
+        return key;
+      }
+    } else if (keys.length === 2) {
+      // Nested key (e.g., "loginPage.signIn")
+      const [parentKey, childKey] = keys;
+      const parentTranslation = currentTranslations[parentKey];
+      
+      if (parentTranslation && typeof parentTranslation === 'object') {
+        const childTranslation = (parentTranslation as NestedTranslation)[childKey];
+        if (childTranslation) {
+          return childTranslation;
+        }
+      }
+    }
+    
+    // If translation not found, fall back to English
+    if (currentLanguage !== 'en') {
+      const enTranslations = translations['en'];
+      
+      if (keys.length === 1) {
+        const enTranslation = enTranslations[key];
+        if (typeof enTranslation === 'string') {
+          return enTranslation;
+        } else if (enTranslation && typeof enTranslation === 'object') {
+          console.warn(`English translation key "${key}" is an object, not a string`);
+          return key;
+        }
+      } else if (keys.length === 2) {
+        const [parentKey, childKey] = keys;
+        const parentTranslation = enTranslations[parentKey];
+        
+        if (parentTranslation && typeof parentTranslation === 'object') {
+          const childTranslation = (parentTranslation as NestedTranslation)[childKey];
+          if (childTranslation) {
+            return childTranslation;
+          }
+        }
+      }
+    }
+    
+    // If still not found, return the key itself
+    return key;
+  }, [currentLanguage]);
+  
+  // Get language by code
+  const getLanguageByCode = useCallback((code: string): Language | undefined => {
+    return Object.values(LANGUAGES).find(lang => lang.code === code);
+  }, []);
+  
+  // Get all languages
+  const getAllLanguages = useCallback((): Language[] => {
+    return Object.values(LANGUAGES);
+  }, []);
+  
+  const value = {
+    currentLanguage,
+    setLanguage,
+    t,
+    getLanguageByCode,
+    getAllLanguages,
+    isLanguageChanging
+  };
+  
+  return (
+    <LanguageContext.Provider value={value}>
+      {children}
+    </LanguageContext.Provider>
+  );
+};
+
+// Custom hook to use the language context
+export const useLanguage = (): LanguageContextType => {
+  const context = useContext(LanguageContext);
+  
+  if (context === undefined) {
+    throw new Error('useLanguage must be used within a LanguageProvider');
+  }
+  
+  return context;
+};
+
+export default LanguageContext;
