@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth, db } from '@/config/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { auth } from '@/config/firebase';
+import { getAuth, getIdToken } from 'firebase/auth';
 
-// Profile API route - using client Firebase SDK only (no Firebase Admin)
-// Force new deployment
+// Client-side only implementation - NO Firebase Admin
 export async function GET(request: NextRequest) {
   try {
     // Get the authorization header from the request
@@ -16,47 +15,26 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    // Extract the token
-    const token = authHeader.split(' ')[1];
+    // For client-side API routes, we can't verify tokens directly
+    // Instead, we'll return the current user info if available
+    const currentUser = auth.currentUser;
     
-    try {
-      // Get the current user from the token
-      const currentUser = auth.currentUser;
-      
-      if (!currentUser) {
-        return NextResponse.json(
-          { message: 'User not authenticated' },
-          { status: 401 }
-        );
-      }
-      
-      // Get user data from Firestore
-      const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-      
-      if (!userDoc.exists()) {
-        return NextResponse.json(
-          { message: 'User not found' },
-          { status: 404 }
-        );
-      }
-      
-      const userData = userDoc.data();
-      
-      // Return the user data
-      return NextResponse.json({
-        _id: currentUser.uid,
-        username: userData.username || currentUser.displayName || 'User',
-        email: currentUser.email,
-        role: userData.role || 'customer',
-        vendorInfo: userData.vendorInfo || null
-      });
-    } catch (verifyError) {
-      console.error('Authentication error:', verifyError);
+    if (!currentUser) {
       return NextResponse.json(
-        { message: 'Authentication failed' },
+        { message: 'User not authenticated' },
         { status: 401 }
       );
     }
+    
+    // Return basic user information
+    return NextResponse.json({
+      _id: currentUser.uid,
+      username: currentUser.displayName || 'User',
+      email: currentUser.email,
+      role: 'customer', // Default role
+      photoURL: currentUser.photoURL
+    });
+    
   } catch (error) {
     console.error('Profile API error:', error);
     return NextResponse.json(
