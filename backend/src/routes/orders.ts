@@ -1,4 +1,4 @@
-import express, { Request, Response, RequestHandler } from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import { protect } from '../utils/authMiddleware';
 import { AuthRequest } from '../routes/auth';
 import { db } from '../config/firebase';
@@ -10,18 +10,20 @@ const router = express.Router();
 // @route   POST /api/orders
 // @desc    Create a new order
 // @access  Private
-router.post('/', protect, (async (req: AuthRequest, res: Response) => {
+router.post('/', protect, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { items, shippingAddress, paymentMethod } = req.body;
     
     // Validate required fields
     if (!items || !items.length || !shippingAddress || !paymentMethod) {
-      return res.status(400).json({ message: 'Items, shipping address, and payment method are required' });
+      res.status(400).json({ message: 'Items, shipping address, and payment method are required' });
+      return;
     }
     
     // Get user ID from auth middleware
     if (!req.user) {
-      return res.status(401).json({ message: 'Not authorized' });
+      res.status(401).json({ message: 'Not authorized' });
+      return;
     }
     
     const userId = req.user._id;
@@ -84,7 +86,8 @@ router.post('/', protect, (async (req: AuthRequest, res: Response) => {
       // Get user data from Firestore
       const userDoc = await db.collection('users').doc(userId).get();
       if (!userDoc.exists) {
-        return res.status(404).json({ message: 'User not found' });
+        res.status(404).json({ message: 'User not found' });
+        return;
       }
       
       const userData = userDoc.data();
@@ -125,7 +128,7 @@ router.post('/', protect, (async (req: AuthRequest, res: Response) => {
       
       if (process.env.NODE_ENV === 'production') {
         // Return the payment link to redirect the user
-        return res.status(201).json({
+        res.status(201).json({
           success: true,
           message: 'Order created and payment link generated',
           data: {
@@ -134,9 +137,10 @@ router.post('/', protect, (async (req: AuthRequest, res: Response) => {
             txRef
           }
         });
+        return;
       } else {
         // For development, return a test payment link
-        return res.status(201).json({
+        res.status(201).json({
           success: true,
           message: 'Order created and test payment link generated',
           data: {
@@ -146,6 +150,7 @@ router.post('/', protect, (async (req: AuthRequest, res: Response) => {
             testMode: true
           }
         });
+        return;
       }
     }
     
@@ -159,17 +164,18 @@ router.post('/', protect, (async (req: AuthRequest, res: Response) => {
     console.error('Order creation error:', error);
     res.status(500).json({ message: 'Server error during order creation' });
   }
-}) as RequestHandler);
+});
 
 // @route   GET /api/orders/payment-callback
 // @desc    Handle payment callback from Flutterwave
 // @access  Public
-router.get('/payment-callback', (async (req: Request, res: Response) => {
+router.get('/payment-callback', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { transaction_id, tx_ref, status } = req.query;
     
     if (!transaction_id || !tx_ref) {
-      return res.status(400).json({ message: 'Invalid payment callback' });
+      res.status(400).json({ message: 'Invalid payment callback' });
+      return;
     }
     
     // Verify the transaction with Flutterwave
@@ -182,7 +188,8 @@ router.get('/payment-callback', (async (req: Request, res: Response) => {
       // Find the order in Firestore
       const orderDoc = await db.collection('orders').doc(orderId).get();
       if (!orderDoc.exists) {
-        return res.status(404).json({ message: 'Order not found' });
+        res.status(404).json({ message: 'Order not found' });
+        return;
       }
       
       // Update order to paid
@@ -207,25 +214,27 @@ router.get('/payment-callback', (async (req: Request, res: Response) => {
     console.error('Payment callback error:', error);
     res.status(500).json({ message: 'Server error during payment callback processing' });
   }
-}) as RequestHandler);
+});
 
 // @route   GET /api/orders/:id
 // @desc    Get order by ID
 // @access  Private
-router.get('/:id', protect, (async (req: AuthRequest, res: Response) => {
+router.get('/:id', protect, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const orderId = req.params.id;
     const orderDoc = await db.collection('orders').doc(orderId).get();
     
     if (!orderDoc.exists) {
-      return res.status(404).json({ message: 'Order not found' });
+      res.status(404).json({ message: 'Order not found' });
+      return;
     }
     
     const orderData = orderDoc.data();
     
     // Check if the order belongs to the user or if the user is an admin
     if (orderData?.userId !== req.user?._id && req.user?.role !== 'admin') {
-      return res.status(403).json({ message: 'Not authorized to view this order' });
+      res.status(403).json({ message: 'Not authorized to view this order' });
+      return;
     }
     
     res.json({ success: true, data: { order: orderData } });
@@ -233,12 +242,12 @@ router.get('/:id', protect, (async (req: AuthRequest, res: Response) => {
     console.error('Get order error:', error);
     res.status(500).json({ message: 'Server error while fetching order' });
   }
-}) as RequestHandler);
+});
 
 // @route   GET /api/orders
 // @desc    Get all orders for a user
 // @access  Private
-router.get('/', protect, (async (req: AuthRequest, res: Response) => {
+router.get('/', protect, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const userId = req.user?._id;
     const ordersSnapshot = await db.collection('orders')
@@ -253,12 +262,12 @@ router.get('/', protect, (async (req: AuthRequest, res: Response) => {
     console.error('Get orders error:', error);
     res.status(500).json({ message: 'Server error while fetching orders' });
   }
-}) as RequestHandler);
+});
 
 // @route   PUT /api/orders/:id/pay
 // @desc    Update order to paid
 // @access  Private
-router.put('/:id/pay', protect, (async (req: AuthRequest, res: Response) => {
+router.put('/:id/pay', protect, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { paymentResult } = req.body;
     const orderId = req.params.id;
@@ -266,14 +275,16 @@ router.put('/:id/pay', protect, (async (req: AuthRequest, res: Response) => {
     const orderDoc = await db.collection('orders').doc(orderId).get();
     
     if (!orderDoc.exists) {
-      return res.status(404).json({ message: 'Order not found' });
+      res.status(404).json({ message: 'Order not found' });
+      return;
     }
     
     const orderData = orderDoc.data();
     
     // Check if the order belongs to the user
     if (orderData?.userId !== req.user?._id) {
-      return res.status(403).json({ message: 'Not authorized to update this order' });
+      res.status(403).json({ message: 'Not authorized to update this order' });
+      return;
     }
     
     // Update order to paid
@@ -291,6 +302,6 @@ router.put('/:id/pay', protect, (async (req: AuthRequest, res: Response) => {
     console.error('Update order payment error:', error);
     res.status(500).json({ message: 'Server error while updating order payment' });
   }
-}) as RequestHandler);
+});
 
 export default router;
