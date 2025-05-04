@@ -1,14 +1,10 @@
 import express, { Request, Response, NextFunction, RequestHandler } from 'express';
-import User from '../models/user';
 import { protect } from '../utils/authMiddleware';
+import { AuthRequest } from '../routes/auth';
+import { db } from '../config/firebase';
 import flutterwaveService from '../services/flutterwaveService';
 
 const router = express.Router();
-
-// Define custom interface for request with user
-interface AuthRequest extends Request {
-  user?: any;
-}
 
 // Subscription plans
 const SUBSCRIPTION_PLANS: Record<string, {
@@ -78,35 +74,39 @@ router.post('/apply', protect, (async (req: AuthRequest, res: Response) => {
     
     const userId = req.user._id;
     
-    // Check if user exists
-    const user = await User.findById(userId);
-    if (!user) {
+    // Check if user exists in Firestore
+    const userDoc = await db.collection('users').doc(userId).get();
+    if (!userDoc.exists) {
       return res.status(404).json({ message: 'User not found' });
     }
     
+    const userData = userDoc.data();
+    
     // Check if user is already a vendor
-    if (user.role === 'vendor') {
+    if (userData?.role === 'vendor') {
       return res.status(400).json({ message: 'User is already a vendor' });
     }
     
-    // Create vendor application (in a real app, you'd store this in a separate collection)
-    // For now, we'll just update the user with the vendor information
-    user.vendorInfo = {
+    // Create vendor application
+    const vendorInfo = {
       storeName,
       description,
       phoneNumber,
       address,
       category,
       status: 'pending', // pending, approved, rejected
-      appliedAt: new Date()
+      appliedAt: new Date().toISOString()
     };
     
-    await user.save();
+    // Update user document with vendor info
+    await db.collection('users').doc(userId).update({
+      vendorInfo
+    });
     
     res.status(201).json({ 
       message: 'Vendor application submitted successfully',
       status: 'pending',
-      vendorInfo: user.vendorInfo
+      vendorInfo
     });
   } catch (error) {
     console.error('Vendor application error:', error);
@@ -138,21 +138,23 @@ router.post('/process-payment', protect, (async (req: AuthRequest, res: Response
     
     const userId = req.user._id;
     
-    // Check if user exists
-    const user = await User.findById(userId);
-    if (!user) {
+    // Check if user exists in Firestore
+    const userDoc = await db.collection('users').doc(userId).get();
+    if (!userDoc.exists) {
       return res.status(404).json({ message: 'User not found' });
     }
     
+    const userData = userDoc.data();
+    
     // Check if user has submitted a vendor application
-    if (!user.vendorInfo || !user.vendorInfo.storeName) {
+    if (!userData?.vendorInfo) {
       return res.status(400).json({ 
-        message: 'Vendor application must be submitted first',
+        message: 'You must submit a vendor application before processing payment',
         code: 'APPLICATION_REQUIRED'
       });
     }
     
-    // Get subscription plan details
+    // Get the subscription plan details
     const plan = SUBSCRIPTION_PLANS[subscriptionPlan as keyof typeof SUBSCRIPTION_PLANS];
     
     // Generate a unique transaction reference
@@ -164,30 +166,27 @@ router.post('/process-payment', protect, (async (req: AuthRequest, res: Response
       currency: 'USD',
       payment_options: 'card',
       customer: {
-        email: user.email,
-        name: user.username,
-        phone_number: user.vendorInfo.phoneNumber || ''
+        email: userData.email,
+        name: userData.username,
+        phone_number: userData.vendorInfo.phoneNumber || ''
       },
       customizations: {
         title: 'Iwanyu Vendor Subscription',
-        description: `${plan.name} Subscription`,
+        description: `Payment for ${plan.name} subscription`,
         logo: 'https://iwanyu.com/logo.png' // Replace with your actual logo URL
       },
       tx_ref: txRef,
       redirect_url: `${process.env.FRONTEND_URL || 'http://localhost:3002'}/api/vendor/payment-callback`,
       meta: {
-        userId: userId.toString(),
+        userId,
         subscriptionPlan
       }
     };
     
-    // Generate payment link with Flutterwave
-    const paymentResponse = await flutterwaveService.generatePaymentLink(paymentPayload);
-    
-    // For testing purposes, we'll simulate a successful payment
-    // In production, we would redirect the user to the payment link
-    
     if (process.env.NODE_ENV === 'production') {
+      // Generate payment link with Flutterwave
+      const paymentResponse = await flutterwaveService.generatePaymentLink(paymentPayload);
+      
       // Return the payment link to redirect the user
       return res.json({
         success: true,
@@ -200,31 +199,40 @@ router.post('/process-payment', protect, (async (req: AuthRequest, res: Response
     } else {
       // For testing, simulate a successful payment
       // Update user to vendor role
-      user.role = 'vendor';
-      user.vendorInfo.status = 'approved';
-      user.vendorInfo.approvedAt = new Date();
-      user.vendorInfo.subscriptionPlan = subscriptionPlan;
-      user.vendorInfo.subscriptionStartDate = new Date();
-      user.vendorInfo.transactionReference = txRef;
+      const subscriptionStartDate = new Date().toISOString();
       
       // Calculate subscription end date (1 month from now)
       const subscriptionEndDate = new Date();
       subscriptionEndDate.setMonth(subscriptionEndDate.getMonth() + 1);
-      user.vendorInfo.subscriptionEndDate = subscriptionEndDate;
       
-      await user.save();
+      await db.collection('users').doc(userId).update({
+        role: 'vendor',
+        'vendorInfo.status': 'approved',
+        'vendorInfo.approvedAt': new Date().toISOString(),
+        'vendorInfo.subscriptionPlan': subscriptionPlan,
+        'vendorInfo.subscriptionStartDate': subscriptionStartDate,
+        'vendorInfo.subscriptionEndDate': subscriptionEndDate.toISOString(),
+        'vendorInfo.transactionReference': txRef,
+        'vendorInfo.transactionId': 'test-transaction-id'
+      });
       
-      res.json({
+      // Get updated user data
+      const updatedUserDoc = await db.collection('users').doc(userId).get();
+      const updatedUserData = updatedUserDoc.data();
+      
+      return res.json({
         success: true,
-        message: 'Payment processed successfully. You are now a vendor!',
-        user: {
-          _id: user._id,
-          username: user.username,
-          email: user.email,
-          role: user.role,
-          vendorInfo: user.vendorInfo
-        },
-        testMode: true
+        message: 'Payment processed successfully (test mode)',
+        data: {
+          user: {
+            _id: userId,
+            username: updatedUserData?.username,
+            email: updatedUserData?.email,
+            role: updatedUserData?.role,
+            vendorInfo: updatedUserData?.vendorInfo
+          },
+          testMode: true
+        }
       });
     }
   } catch (error) {
@@ -251,32 +259,34 @@ router.get('/payment-callback', (async (req: Request, res: Response) => {
       // Extract metadata from the transaction
       const { userId, subscriptionPlan } = verificationResponse.data.meta;
       
-      // Find the user
-      const user = await User.findById(userId);
-      if (!user) {
+      // Find the user in Firestore
+      const userDoc = await db.collection('users').doc(userId).get();
+      if (!userDoc.exists) {
         return res.status(404).json({ message: 'User not found' });
       }
       
+      const userData = userDoc.data();
+      
       // Check if user has vendorInfo
-      if (!user.vendorInfo) {
+      if (!userData?.vendorInfo) {
         return res.status(400).json({ message: 'Vendor application not found' });
       }
-      
-      // Update user to vendor role
-      user.role = 'vendor';
-      user.vendorInfo.status = 'approved';
-      user.vendorInfo.approvedAt = new Date();
-      user.vendorInfo.subscriptionPlan = subscriptionPlan;
-      user.vendorInfo.subscriptionStartDate = new Date();
-      user.vendorInfo.transactionReference = tx_ref as string;
-      user.vendorInfo.transactionId = transaction_id as string;
       
       // Calculate subscription end date (1 month from now)
       const subscriptionEndDate = new Date();
       subscriptionEndDate.setMonth(subscriptionEndDate.getMonth() + 1);
-      user.vendorInfo.subscriptionEndDate = subscriptionEndDate;
       
-      await user.save();
+      // Update user to vendor role
+      await db.collection('users').doc(userId).update({
+        role: 'vendor',
+        'vendorInfo.status': 'approved',
+        'vendorInfo.approvedAt': new Date().toISOString(),
+        'vendorInfo.subscriptionPlan': subscriptionPlan,
+        'vendorInfo.subscriptionStartDate': new Date().toISOString(),
+        'vendorInfo.subscriptionEndDate': subscriptionEndDate.toISOString(),
+        'vendorInfo.transactionReference': tx_ref as string,
+        'vendorInfo.transactionId': transaction_id as string
+      });
       
       // Redirect to success page
       res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3002'}/become-vendor/success`);
@@ -302,34 +312,46 @@ router.get('/dashboard', protect, (async (req: AuthRequest, res: Response) => {
     
     const userId = req.user._id;
     
-    // Check if user exists
-    const user = await User.findById(userId);
-    if (!user) {
+    // Check if user exists in Firestore
+    const userDoc = await db.collection('users').doc(userId).get();
+    if (!userDoc.exists) {
       return res.status(404).json({ message: 'User not found' });
     }
     
+    const userData = userDoc.data();
+    
     // Check if user is a vendor
-    if (user.role !== 'vendor') {
+    if (userData?.role !== 'vendor') {
       return res.status(403).json({ message: 'Access denied. User is not a vendor' });
     }
+    
+    // Get product count
+    const productsSnapshot = await db.collection('products')
+      .where('vendorId', '==', userId)
+      .get();
+    
+    const totalProducts = productsSnapshot.size;
+    
+    // Get order stats (in a real app, you'd calculate this from orders)
+    // For now, we'll just return placeholder values
     
     // Return vendor dashboard data
     res.json({
       vendor: {
-        _id: user._id,
-        username: user.username,
-        email: user.email,
-        storeName: user.vendorInfo?.storeName,
-        description: user.vendorInfo?.description,
-        category: user.vendorInfo?.category,
-        subscriptionPlan: user.vendorInfo?.subscriptionPlan,
-        subscriptionStartDate: user.vendorInfo?.subscriptionStartDate,
-        subscriptionEndDate: user.vendorInfo?.subscriptionEndDate,
-        status: user.vendorInfo?.status
+        _id: userId,
+        username: userData.username,
+        email: userData.email,
+        storeName: userData.vendorInfo?.storeName,
+        description: userData.vendorInfo?.description,
+        category: userData.vendorInfo?.category,
+        subscriptionPlan: userData.vendorInfo?.subscriptionPlan,
+        subscriptionStartDate: userData.vendorInfo?.subscriptionStartDate,
+        subscriptionEndDate: userData.vendorInfo?.subscriptionEndDate,
+        status: userData.vendorInfo?.status
       },
       stats: {
-        totalProducts: 0, // This would be fetched from a products collection in a real app
-        totalSales: 0, // This would be fetched from an orders collection in a real app
+        totalProducts,
+        totalSales: 0, // This would be fetched from orders in a real app
         totalRevenue: 0 // This would be calculated from orders in a real app
       }
     });

@@ -1,16 +1,11 @@
 import express, { Request, Response, RequestHandler } from 'express';
 import { protect } from '../utils/authMiddleware';
-import Order from '../models/order';
-import Product from '../models/product';
-import User from '../models/user';
+import { AuthRequest } from '../routes/auth';
+import { db } from '../config/firebase';
+import { v4 as uuidv4 } from 'uuid';
 import flutterwaveService from '../services/flutterwaveService';
 
 const router = express.Router();
-
-// Define custom interface for request with user
-interface AuthRequest extends Request {
-  user?: any;
-}
 
 // @route   POST /api/orders
 // @desc    Create a new order
@@ -31,23 +26,29 @@ router.post('/', protect, (async (req: AuthRequest, res: Response) => {
     
     const userId = req.user._id;
     
-    // Fetch products to calculate total price
+    // Fetch products from Firestore
     const productIds = items.map((item: any) => item.productId);
-    const products = await Product.find({ _id: { $in: productIds } });
+    const productsSnapshot = await Promise.all(
+      productIds.map(id => db.collection('products').doc(id).get())
+    );
+    
+    const products = productsSnapshot
+      .filter(doc => doc.exists)
+      .map(doc => ({ id: doc.id, ...doc.data() }));
     
     // Map products to order items with calculated prices
     const orderItems = items.map((item: any) => {
-      const product = products.find(p => p._id.toString() === item.productId);
+      const product = products.find(p => p.id === item.productId);
       if (!product) {
         throw new Error(`Product with ID ${item.productId} not found`);
       }
       
       return {
-        product: product._id,
+        productId: product.id,
         name: product.name,
         quantity: item.quantity,
         price: product.price,
-        image: product.images[0] || '',
+        image: product.images && product.images.length > 0 ? product.images[0] : '',
       };
     });
     
@@ -57,9 +58,11 @@ router.post('/', protect, (async (req: AuthRequest, res: Response) => {
     const taxPrice = itemsPrice * 0.15; // 15% tax
     const totalPrice = itemsPrice + shippingPrice + taxPrice;
     
-    // Create order in database
-    const order = new Order({
-      user: userId,
+    // Create order in Firestore
+    const orderId = uuidv4();
+    const orderData = {
+      id: orderId,
+      userId,
       orderItems,
       shippingAddress,
       paymentMethod,
@@ -71,17 +74,20 @@ router.post('/', protect, (async (req: AuthRequest, res: Response) => {
       paidAt: null,
       isDelivered: false,
       deliveredAt: null,
-    });
+      createdAt: new Date().toISOString(),
+    };
     
-    await order.save();
+    await db.collection('orders').doc(orderId).set(orderData);
     
     // If payment method is Flutterwave, generate payment link
     if (paymentMethod === 'flutterwave') {
-      // Get user details for payment
-      const user = await User.findById(userId);
-      if (!user) {
+      // Get user data from Firestore
+      const userDoc = await db.collection('users').doc(userId).get();
+      if (!userDoc.exists) {
         return res.status(404).json({ message: 'User not found' });
       }
+      
+      const userData = userDoc.data();
       
       // Generate a unique transaction reference
       const txRef = flutterwaveService.generateTransactionReference();
@@ -92,20 +98,20 @@ router.post('/', protect, (async (req: AuthRequest, res: Response) => {
         currency: 'USD',
         payment_options: 'card',
         customer: {
-          email: user.email,
-          name: user.username,
-          phone_number: user.phoneNumber || ''
+          email: userData?.email || '',
+          name: userData?.username || '',
+          phone_number: userData?.phoneNumber || ''
         },
         customizations: {
           title: 'Iwanyu Order Payment',
-          description: `Payment for Order #${order._id}`,
+          description: `Payment for Order #${orderId}`,
           logo: 'https://iwanyu.com/logo.png' // Replace with your actual logo URL
         },
         tx_ref: txRef,
         redirect_url: `${process.env.FRONTEND_URL || 'http://localhost:3002'}/api/orders/payment-callback`,
         meta: {
-          orderId: order._id.toString(),
-          userId: userId.toString()
+          orderId: orderId,
+          userId: userId
         }
       };
       
@@ -113,8 +119,9 @@ router.post('/', protect, (async (req: AuthRequest, res: Response) => {
       const paymentResponse = await flutterwaveService.generatePaymentLink(paymentPayload);
       
       // Update order with transaction reference
-      order.transactionReference = txRef;
-      await order.save();
+      await db.collection('orders').doc(orderId).update({
+        transactionReference: txRef
+      });
       
       if (process.env.NODE_ENV === 'production') {
         // Return the payment link to redirect the user
@@ -122,19 +129,19 @@ router.post('/', protect, (async (req: AuthRequest, res: Response) => {
           success: true,
           message: 'Order created and payment link generated',
           data: {
-            order,
+            order: orderData,
             paymentLink: paymentResponse.data.link,
             txRef
           }
         });
       } else {
-        // For testing, return the order with a simulated payment link
+        // For development, return a test payment link
         return res.status(201).json({
           success: true,
-          message: 'Order created (test mode)',
+          message: 'Order created and test payment link generated',
           data: {
-            order,
-            paymentLink: `${process.env.FRONTEND_URL || 'http://localhost:3002'}/checkout/payment?order=${order._id}&test=true`,
+            order: orderData,
+            paymentLink: `${process.env.FRONTEND_URL || 'http://localhost:3002'}/checkout/payment?order=${orderId}&test=true`,
             txRef,
             testMode: true
           }
@@ -146,7 +153,7 @@ router.post('/', protect, (async (req: AuthRequest, res: Response) => {
     res.status(201).json({
       success: true,
       message: 'Order created',
-      data: { order }
+      data: { order: orderData }
     });
   } catch (error) {
     console.error('Order creation error:', error);
@@ -172,26 +179,26 @@ router.get('/payment-callback', (async (req: Request, res: Response) => {
       // Extract metadata from the transaction
       const { orderId } = verificationResponse.data.meta;
       
-      // Find the order
-      const order = await Order.findById(orderId);
-      if (!order) {
+      // Find the order in Firestore
+      const orderDoc = await db.collection('orders').doc(orderId).get();
+      if (!orderDoc.exists) {
         return res.status(404).json({ message: 'Order not found' });
       }
       
       // Update order to paid
-      order.isPaid = true;
-      order.paidAt = new Date();
-      order.paymentResult = {
-        id: transaction_id as string,
-        status: 'completed',
-        update_time: new Date().toISOString(),
-        email_address: verificationResponse.data.customer.email
-      };
-      
-      await order.save();
+      await db.collection('orders').doc(orderId).update({
+        isPaid: true,
+        paidAt: new Date().toISOString(),
+        paymentResult: {
+          id: transaction_id as string,
+          status: 'completed',
+          update_time: new Date().toISOString(),
+          email_address: verificationResponse.data.customer.email
+        }
+      });
       
       // Redirect to success page
-      res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3002'}/orders/${order._id}/success`);
+      res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3002'}/orders/${orderId}/success`);
     } else {
       // Payment failed
       res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3002'}/orders/payment-failed`);
@@ -207,18 +214,21 @@ router.get('/payment-callback', (async (req: Request, res: Response) => {
 // @access  Private
 router.get('/:id', protect, (async (req: AuthRequest, res: Response) => {
   try {
-    const order = await Order.findById(req.params.id);
+    const orderId = req.params.id;
+    const orderDoc = await db.collection('orders').doc(orderId).get();
     
-    if (!order) {
+    if (!orderDoc.exists) {
       return res.status(404).json({ message: 'Order not found' });
     }
     
+    const orderData = orderDoc.data();
+    
     // Check if the order belongs to the user or if the user is an admin
-    if (order.user.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+    if (orderData?.userId !== req.user?._id && req.user?.role !== 'admin') {
       return res.status(403).json({ message: 'Not authorized to view this order' });
     }
     
-    res.json({ success: true, data: { order } });
+    res.json({ success: true, data: { order: orderData } });
   } catch (error) {
     console.error('Get order error:', error);
     res.status(500).json({ message: 'Server error while fetching order' });
@@ -230,7 +240,13 @@ router.get('/:id', protect, (async (req: AuthRequest, res: Response) => {
 // @access  Private
 router.get('/', protect, (async (req: AuthRequest, res: Response) => {
   try {
-    const orders = await Order.find({ user: req.user._id }).sort({ createdAt: -1 });
+    const userId = req.user?._id;
+    const ordersSnapshot = await db.collection('orders')
+      .where('userId', '==', userId)
+      .orderBy('createdAt', 'desc')
+      .get();
+    
+    const orders = ordersSnapshot.docs.map(doc => doc.data());
     
     res.json({ success: true, data: { orders } });
   } catch (error) {
@@ -245,24 +261,30 @@ router.get('/', protect, (async (req: AuthRequest, res: Response) => {
 router.put('/:id/pay', protect, (async (req: AuthRequest, res: Response) => {
   try {
     const { paymentResult } = req.body;
+    const orderId = req.params.id;
     
-    const order = await Order.findById(req.params.id);
+    const orderDoc = await db.collection('orders').doc(orderId).get();
     
-    if (!order) {
+    if (!orderDoc.exists) {
       return res.status(404).json({ message: 'Order not found' });
     }
     
+    const orderData = orderDoc.data();
+    
     // Check if the order belongs to the user
-    if (order.user.toString() !== req.user._id.toString()) {
+    if (orderData?.userId !== req.user?._id) {
       return res.status(403).json({ message: 'Not authorized to update this order' });
     }
     
     // Update order to paid
-    order.isPaid = true;
-    order.paidAt = new Date();
-    order.paymentResult = paymentResult;
+    const updatedOrder = {
+      ...orderData,
+      isPaid: true,
+      paidAt: new Date().toISOString(),
+      paymentResult
+    };
     
-    const updatedOrder = await order.save();
+    await db.collection('orders').doc(orderId).update(updatedOrder);
     
     res.json({ success: true, data: { order: updatedOrder } });
   } catch (error) {
