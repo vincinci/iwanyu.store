@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth, db } from '@/config/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 
+// Profile API route - using client Firebase SDK only (no Firebase Admin)
+// Force new deployment
 export async function GET(request: NextRequest) {
   try {
     // Get the authorization header from the request
