@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
-import mongoose from 'mongoose';
+import { auth, db } from '../config/firebase';
 
 // Extend the Express Request interface to include the user property
 declare global {
@@ -12,6 +11,7 @@ declare global {
         email: string;
         role: 'customer' | 'vendor' | 'admin';
       };
+      token?: string;
     }
   }
 }
@@ -22,32 +22,42 @@ export const protect = async (req: Request, res: Response, next: NextFunction) =
     const token = req.header('Authorization')?.replace('Bearer ', '');
     
     if (!token) {
-      res.status(401).json({ message: 'Not authorized, no token' });
-      return;
+      return res.status(401).json({ message: 'Not authorized, no token' });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'iwanyu_secret_jwt_token_2025') as { id: string };
-    
-    // Since we're not actually connecting to the database in this simplified version,
-    // we'll create a mock user for demonstration purposes
-    const mockUser = {
-      _id: decoded.id,
-      username: 'testuser',
-      email: 'test@example.com',
-      role: 'customer' as 'customer' | 'vendor' | 'admin'
-    };
-    
-    // Set the user property on the request object
-    req.user = {
-      _id: mockUser._id,
-      username: mockUser.username,
-      email: mockUser.email,
-      role: mockUser.role
-    };
-    
-    next();
+    try {
+      // Verify the Firebase token
+      const decodedToken = await auth.verifyIdToken(token);
+      const uid = decodedToken.uid;
+      
+      // Store the token for potential use in other middleware
+      req.token = token;
+      
+      // Get user data from Firestore
+      const userDoc = await db.collection('users').doc(uid).get();
+      
+      if (!userDoc.exists) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+      
+      const userData = userDoc.data();
+      
+      // Set the user property on the request object
+      req.user = {
+        _id: uid,
+        username: userData?.username || 'Unknown',
+        email: userData?.email || 'unknown@example.com',
+        role: (userData?.role as 'customer' | 'vendor' | 'admin') || 'customer'
+      };
+      
+      next();
+    } catch (error) {
+      console.error('Token verification error:', error);
+      return res.status(401).json({ message: 'Not authorized, invalid token' });
+    }
   } catch (error) {
-    res.status(401).json({ message: 'Not authorized, token failed' });
+    console.error('Auth middleware error:', error);
+    res.status(500).json({ message: 'Server error' });
   }
 };
 

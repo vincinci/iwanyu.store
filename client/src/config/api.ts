@@ -11,10 +11,13 @@ const API_CONFIG = {
     if (!endpoint.startsWith('/')) {
       endpoint = `/${endpoint}`;
     }
-    if (!endpoint.startsWith('/api/') && !baseUrl.endsWith('/api')) {
-      endpoint = `/api${endpoint}`;
+    
+    // Handle potential double /api/ in the URL
+    if (endpoint.startsWith('/api/') && baseUrl.endsWith('/api')) {
+      endpoint = endpoint.substring(4); // Remove the /api prefix
     }
-    return `${baseUrl}${endpoint.startsWith('/api') && baseUrl.endsWith('/api') ? endpoint.substring(4) : endpoint}`;
+    
+    return `${baseUrl}${endpoint}`;
   },
   
   // Helper function to make API requests with proper headers
@@ -48,31 +51,41 @@ const API_CONFIG = {
       
       // Check if response is OK
       if (!response.ok) {
-        // Try to get error message from JSON response
-        let errorData;
+        // Get content type to determine how to handle the response
         const contentType = response.headers.get('content-type');
         
         if (contentType && contentType.includes('application/json')) {
-          errorData = await response.json().catch(() => null);
+          // If JSON, parse the error message
+          const errorData = await response.json().catch(() => null);
+          throw new Error(errorData?.message || `Server returned ${response.status}`);
         } else {
           // If not JSON, get text content for debugging
           const textContent = await response.text().catch(() => 'Non-JSON response received');
-          console.error('Non-JSON response:', textContent.substring(0, 100) + '...');
+          console.error('Non-JSON response:', textContent.substring(0, 500));
+          console.error('Response status:', response.status);
+          console.error('Response headers:', Object.fromEntries([...response.headers.entries()]));
           throw new Error(`Server returned ${response.status}: Non-JSON response`);
         }
-        
-        throw new Error(errorData?.message || `Server returned ${response.status}`);
       }
       
       // Check content type to ensure we're getting JSON
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
         const textContent = await response.text().catch(() => 'Non-JSON response received');
-        console.error('Expected JSON but got:', textContent.substring(0, 100) + '...');
+        console.error('Expected JSON but got:', textContent.substring(0, 500));
+        console.error('Response headers:', Object.fromEntries([...response.headers.entries()]));
         throw new Error('Server returned non-JSON response');
       }
       
-      return response.json();
+      // Parse JSON response
+      try {
+        return await response.json();
+      } catch (jsonError) {
+        console.error('Failed to parse JSON response:', jsonError);
+        const textContent = await response.text().catch(() => 'Could not get response text');
+        console.error('Raw response:', textContent.substring(0, 500));
+        throw new Error('Invalid JSON response from server');
+      }
     } catch (error) {
       console.error('API request failed:', error);
       throw error;
