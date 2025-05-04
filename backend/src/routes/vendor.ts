@@ -182,66 +182,25 @@ router.post('/process-payment', protect, async (req: AuthRequest, res: Response,
         logo: 'https://iwanyu.com/logo.png' // Replace with your actual logo URL
       },
       tx_ref: txRef,
-      redirect_url: `${process.env.FRONTEND_URL || 'http://localhost:3002'}/api/vendor/payment-callback`,
+      redirect_url: `${process.env.FRONTEND_URL}/api/vendor/payment-callback`,
       meta: {
         userId: userId,
         subscriptionPlan: subscriptionPlan
       }
     };
     
-    if (process.env.NODE_ENV === 'production') {
-      // Generate payment link with Flutterwave
-      const paymentResponse = await flutterwaveService.generatePaymentLink(paymentPayload);
-      
-      // Return the payment link to redirect the user
-      res.json({
-        success: true,
-        message: 'Payment link generated',
-        data: {
-          paymentLink: paymentResponse.data.link,
-          txRef
-        }
-      });
-    } else {
-      // For testing, simulate a successful payment
-      // Update user to vendor role
-      const subscriptionStartDate = new Date().toISOString();
-      
-      // Calculate subscription end date (1 month from now)
-      const subscriptionEndDate = new Date();
-      subscriptionEndDate.setMonth(subscriptionEndDate.getMonth() + 1);
-      
-      // Update user to vendor role
-      await db.collection('users').doc(userId).update({
-        role: 'vendor',
-        'vendorInfo.status': 'approved',
-        'vendorInfo.approvedAt': new Date().toISOString(),
-        'vendorInfo.subscriptionPlan': subscriptionPlan,
-        'vendorInfo.subscriptionStartDate': subscriptionStartDate,
-        'vendorInfo.subscriptionEndDate': subscriptionEndDate.toISOString(),
-        'vendorInfo.transactionReference': txRef
-      });
-      
-      // Get the updated user data
-      const updatedUserDoc = await db.collection('users').doc(userId).get();
-      const updatedUserData = updatedUserDoc.data();
-      
-      // Return success response with user data
-      res.json({
-        success: true,
-        message: 'Payment processed successfully (test mode)',
-        data: {
-          user: {
-            _id: userId,
-            username: updatedUserData?.username,
-            email: updatedUserData?.email,
-            role: updatedUserData?.role,
-            vendorInfo: updatedUserData?.vendorInfo
-          },
-          testMode: true
-        }
-      });
-    }
+    // Generate payment link with Flutterwave
+    const paymentResponse = await flutterwaveService.generatePaymentLink(paymentPayload);
+    
+    // Return the payment link to redirect the user
+    res.json({
+      success: true,
+      message: 'Payment link generated',
+      data: {
+        paymentLink: paymentResponse.data.link,
+        txRef
+      }
+    });
   } catch (error) {
     console.error('Payment processing error:', error);
     res.status(500).json({ message: 'Server error during payment processing' });
@@ -299,10 +258,10 @@ router.get('/payment-callback', async (req: Request, res: Response, next: NextFu
       });
       
       // Redirect to success page
-      res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3002'}/become-vendor/success`);
+      res.redirect(`${process.env.FRONTEND_URL}/become-vendor/success`);
     } else {
       // Payment failed
-      res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3002'}/become-vendor/failed`);
+      res.redirect(`${process.env.FRONTEND_URL}/become-vendor/failed`);
     }
   } catch (error) {
     console.error('Payment callback error:', error);

@@ -12,27 +12,13 @@ import orderRoutes from './routes/orders';
 // Load environment variables
 dotenv.config();
 
-// Initialize Firebase Admin
-const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT;
-if (serviceAccount) {
-  initializeApp({
-    credential: cert(JSON.parse(serviceAccount))
-  });
-} else {
-  // For local development without service account JSON
-  initializeApp({
-    projectId: process.env.FIREBASE_PROJECT_ID || 'iwanyu'
-  });
-}
-
 // Create Express app
 const app = express();
 
 // CORS configuration
 const allowedOrigins = [
-  'http://localhost:3002',
-  'https://iwanyu.vercel.app',
-  process.env.FRONTEND_URL
+  process.env.FRONTEND_URL,
+  'https://iwanyu.vercel.app'
 ].filter(Boolean);
 
 app.use(cors({
@@ -40,7 +26,7 @@ app.use(cors({
     // Allow requests with no origin (like mobile apps, curl requests)
     if (!origin) return callback(null, true);
     
-    if (allowedOrigins.indexOf(origin) !== -1 || !origin) {
+    if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
@@ -67,8 +53,7 @@ app.get('/api/healthcheck', function(req: Request, res: Response) {
   res.json({ 
     status: 'ok', 
     message: 'Server is running',
-    port: process.env.PORT || 3001,
-    environment: process.env.NODE_ENV || 'development',
+    environment: process.env.NODE_ENV || 'production',
     firebase: process.env.FIREBASE_PROJECT_ID || 'not configured'
   });
 });
@@ -79,10 +64,7 @@ const portNumber = typeof PORT === 'string' ? parseInt(PORT, 10) : PORT;
 
 const server = app.listen(portNumber, () => {
   console.log(`Server running on port ${portNumber}`);
-  console.log(`API available at http://localhost:${portNumber}/api`);
-  console.log(`Health check at http://localhost:${portNumber}/api/healthcheck`);
-  console.log(`Registration endpoint: http://localhost:${portNumber}/api/auth/register`);
-  console.log(`Login endpoint: http://localhost:${portNumber}/api/auth/login`);
+  console.log(`Health check available at /api/healthcheck`);
 });
 
 // Handle server shutdown gracefully

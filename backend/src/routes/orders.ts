@@ -111,7 +111,7 @@ router.post('/', protect, async (req: AuthRequest, res: Response, next: NextFunc
           logo: 'https://iwanyu.com/logo.png' // Replace with your actual logo URL
         },
         tx_ref: txRef,
-        redirect_url: `${process.env.FRONTEND_URL || 'http://localhost:3002'}/api/orders/payment-callback`,
+        redirect_url: `${process.env.FRONTEND_URL}/api/orders/payment-callback`,
         meta: {
           orderId: orderId,
           userId: userId
@@ -126,32 +126,17 @@ router.post('/', protect, async (req: AuthRequest, res: Response, next: NextFunc
         transactionReference: txRef
       });
       
-      if (process.env.NODE_ENV === 'production') {
-        // Return the payment link to redirect the user
-        res.status(201).json({
-          success: true,
-          message: 'Order created and payment link generated',
-          data: {
-            order: orderData,
-            paymentLink: paymentResponse.data.link,
-            txRef
-          }
-        });
-        return;
-      } else {
-        // For development, return a test payment link
-        res.status(201).json({
-          success: true,
-          message: 'Order created and test payment link generated',
-          data: {
-            order: orderData,
-            paymentLink: `${process.env.FRONTEND_URL || 'http://localhost:3002'}/checkout/payment?order=${orderId}&test=true`,
-            txRef,
-            testMode: true
-          }
-        });
-        return;
-      }
+      // Return the payment link to redirect the user
+      res.status(201).json({
+        success: true,
+        message: 'Order created and payment link generated',
+        data: {
+          order: orderData,
+          paymentLink: paymentResponse.data.link,
+          txRef
+        }
+      });
+      return;
     }
     
     // For other payment methods, just return the order
@@ -205,10 +190,10 @@ router.get('/payment-callback', async (req: Request, res: Response, next: NextFu
       });
       
       // Redirect to success page
-      res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3002'}/orders/${orderId}/success`);
+      res.redirect(`${process.env.FRONTEND_URL}/orders/${orderId}/success`);
     } else {
       // Payment failed
-      res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3002'}/orders/payment-failed`);
+      res.redirect(`${process.env.FRONTEND_URL}/orders/payment-failed`);
     }
   } catch (error) {
     console.error('Payment callback error:', error);
