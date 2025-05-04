@@ -1,9 +1,8 @@
 import express, { Request, Response } from 'express';
-import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import cors from 'cors';
-import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
+import { initializeApp, cert } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
 
 // Import routes
 import authRoutes from './routes/auth';
@@ -12,6 +11,19 @@ import orderRoutes from './routes/orders';
 
 // Load environment variables
 dotenv.config();
+
+// Initialize Firebase Admin
+const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT;
+if (serviceAccount) {
+  initializeApp({
+    credential: cert(JSON.parse(serviceAccount))
+  });
+} else {
+  // For local development without service account JSON
+  initializeApp({
+    projectId: process.env.FIREBASE_PROJECT_ID || 'iwanyu'
+  });
+}
 
 // Create Express app
 const app = express();
@@ -40,12 +52,6 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Connect to MongoDB
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/iwanyu';
-mongoose.connect(MONGODB_URI)
-  .then(() => console.log('MongoDB connected successfully'))
-  .catch(err => console.error('MongoDB connection error:', err));
-
 // Mount routes
 app.use('/api/auth', authRoutes);
 app.use('/api/vendor', vendorRoutes);
@@ -62,7 +68,8 @@ app.get('/api/healthcheck', function(req: Request, res: Response) {
     status: 'ok', 
     message: 'Server is running',
     port: process.env.PORT || 3001,
-    environment: process.env.NODE_ENV || 'development'
+    environment: process.env.NODE_ENV || 'development',
+    firebase: process.env.FIREBASE_PROJECT_ID || 'not configured'
   });
 });
 
@@ -83,13 +90,7 @@ process.on('SIGTERM', () => {
   console.log('SIGTERM signal received: closing HTTP server');
   server.close(() => {
     console.log('HTTP server closed');
-    mongoose.connection.close().then(() => {
-      console.log('MongoDB connection closed');
-      process.exit(0);
-    }).catch(err => {
-      console.error('Error closing MongoDB connection:', err);
-      process.exit(1);
-    });
+    process.exit(0);
   });
 });
 
