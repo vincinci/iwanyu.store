@@ -2,9 +2,17 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   /* config options here */
-  output: 'export',
-  images: {
-    unoptimized: true,
+  async rewrites() {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    
+    return {
+      beforeFiles: [
+        {
+          source: '/api/:path*',
+          destination: `${apiUrl}/api/:path*`,
+        },
+      ],
+    };
   },
   webpack: (config, { isServer }) => {
     // Replace Firebase modules with empty modules
