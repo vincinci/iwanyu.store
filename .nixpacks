@@ -1,0 +1,18 @@
+plan:
+  - name: setup
+    actions:
+      - type: SetEnv
+        key: NIXPACKS_NODE_VERSION
+        value: "18"
+  - name: install
+    actions:
+      - type: RunCmd
+        command: cd backend && npm install
+  - name: build
+    actions:
+      - type: RunCmd
+        command: cd backend && npm run build
+  - name: start
+    actions:
+      - type: RunCmd
+        command: cd backend && npm start
