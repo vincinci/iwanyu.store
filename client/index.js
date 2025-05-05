@@ -1,14 +1,10 @@
 // Simple Express server that doesn't rely on Next.js
 const express = require('express');
-const path = require('path');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Serve static files from the public directory
-app.use(express.static(path.join(__dirname, 'public')));
-
 // Create a simple HTML page that redirects to the backend
-app.get('/', (req, res) => {
+app.get('*', (req, res) => {
   res.send(`
     <!DOCTYPE html>
     <html>
@@ -44,11 +40,6 @@ app.get('/', (req, res) => {
       </body>
     </html>
   `);
-});
-
-// API proxy
-app.use('/api', (req, res) => {
-  res.redirect(`https://iwanyu-store.onrender.com/api${req.url}`);
 });
 
 app.listen(port, () => {
