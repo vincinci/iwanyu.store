@@ -2,10 +2,6 @@
 
 const nextConfig = {
   /* config options here */
-  output: 'export',
-  images: {
-    unoptimized: true,
-  },
   async rewrites() {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
     

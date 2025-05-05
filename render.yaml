@@ -23,11 +23,12 @@ services:
       - key: FLUTTERWAVE_ENCRYPTION_KEY
         sync: false
 
-  # Frontend Next.js Service as Static Site
-  - type: static
+  # Frontend Next.js Service with Express server
+  - type: web
     name: iwanyu-frontend
+    env: node
     buildCommand: cd client && npm install && npm run build
-    publishDir: client/out
+    startCommand: cd client && npm start
     envVars:
       - key: NODE_ENV
         value: production
