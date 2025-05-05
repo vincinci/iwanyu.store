@@ -36,9 +36,35 @@ export function getIdToken() {
   return Promise.resolve('stub-token');
 }
 
+export function onAuthStateChanged(auth, callback) {
+  callback(null);
+  return () => {};
+}
+
+export function signInWithCustomToken() {
+  return Promise.resolve({
+    user: {
+      uid: 'stub-user-id',
+      email: 'stub@example.com',
+      getIdToken: () => Promise.resolve('stub-token')
+    }
+  });
+}
+
+export function signOut() {
+  return Promise.resolve();
+}
+
+// Alias for signOut to match import in AuthContext
+export const firebaseSignOut = signOut;
+
 export default {
   getAuth,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  getIdToken
+  getIdToken,
+  onAuthStateChanged,
+  signInWithCustomToken,
+  signOut,
+  firebaseSignOut
 };
