@@ -47,24 +47,19 @@ const userObj = {
 
 const User = {
   find: () => ({
-    select: () => Promise.resolve([userObj]),
-    limit: () => ({
-      skip: () => ({
-        sort: () => Promise.resolve([userObj])
-      })
-    })
+    select: (fields?: string) => Promise.resolve([userObj])
   }),
   findById: (id: string) => ({
-    select: () => Promise.resolve({...userObj, _id: id}),
+    select: (fields?: string) => Promise.resolve({...userObj, _id: id}),
     exec: () => Promise.resolve({...userObj, _id: id})
   }),
   findOne: (query: any) => ({
-    select: () => Promise.resolve({...userObj, ...query}),
+    select: (fields?: string) => Promise.resolve({...userObj, ...query}),
     exec: () => Promise.resolve({...userObj, ...query})
   }),
   countDocuments: () => Promise.resolve(1),
   create: (data: any) => Promise.resolve({...userObj, ...data}),
-  updateOne: () => Promise.resolve({ acknowledged: true, modifiedCount: 1 })
+  updateOne: (query: any, data: any) => Promise.resolve({ acknowledged: true, modifiedCount: 1 })
 };
 
 export default User;

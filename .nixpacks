@@ -4,6 +4,9 @@ plan:
       - type: SetEnv
         key: NIXPACKS_NODE_VERSION
         value: "18"
+      - type: SetEnv
+        key: NIXPACKS_NPM_INSTALL_CMD
+        value: "npm install"
   - name: install
     actions:
       - type: RunCmd

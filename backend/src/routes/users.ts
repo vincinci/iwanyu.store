@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express';
 import User from '../models/user';
 import { protect, adminOnly } from '../utils/authMiddleware';
+import { AuthRequest } from './auth';
 
 const router = express.Router();
 
@@ -9,7 +10,7 @@ const router = express.Router();
 // @access  Private/Admin
 router.get('/', protect, adminOnly, async (req: Request, res: Response) => {
   try {
-    const users = await User.find({}).select('-password');
+    const users = await User.find().select('-password');
     res.json(users);
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
@@ -19,21 +20,21 @@ router.get('/', protect, adminOnly, async (req: Request, res: Response) => {
 // @route   GET /api/users/profile
 // @desc    Get user profile
 // @access  Private
-router.get('/profile', protect, async (req: Request, res: Response) => {
+router.get('/profile', protect, async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) {
       res.status(401).json({ message: 'User not authenticated' });
       return;
     }
 
-    const user = await User.findById(req.user._id).select('-password');
+    const userResult = await User.findById(req.user._id).select('-password');
     
-    if (!user) {
+    if (!userResult) {
       res.status(404).json({ message: 'User not found' });
       return;
     }
     
-    res.json(user);
+    res.json(userResult);
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
   }
@@ -42,28 +43,32 @@ router.get('/profile', protect, async (req: Request, res: Response) => {
 // @route   PUT /api/users/profile
 // @desc    Update user profile
 // @access  Private
-router.put('/profile', protect, async (req: Request, res: Response) => {
+router.put('/profile', protect, async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user) {
       res.status(401).json({ message: 'User not authenticated' });
       return;
     }
 
-    const user = await User.findById(req.user._id);
+    const userResult = await User.findById(req.user._id).exec();
     
-    if (!user) {
+    if (!userResult) {
       res.status(404).json({ message: 'User not found' });
       return;
     }
     
-    user.username = req.body.username || user.username;
-    user.email = req.body.email || user.email;
+    // Create an updated user object
+    const updatedData = {
+      username: req.body.username || userResult.username,
+      email: req.body.email || userResult.email,
+      password: req.body.password ? req.body.password : userResult.password
+    };
     
-    if (req.body.password) {
-      user.password = req.body.password;
-    }
+    // Update the user in the database
+    await User.updateOne({ _id: req.user._id }, updatedData);
     
-    const updatedUser = await user.save();
+    // Get the updated user
+    const updatedUser = await User.findById(req.user._id).exec();
     
     res.json({
       _id: updatedUser._id,
