@@ -14,9 +14,6 @@ if (!DATABASE_URL) {
   process.exit(1);
 }
 
-// Configure Neon
-neonConfig.fetchConnectionCache = true;
-
 // Create SQL client
 const sql = neon(DATABASE_URL);
 
