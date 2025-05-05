@@ -10,7 +10,6 @@ interface OrderItem {
   price: number;
 }
 
-// Shipping Address Schema
 interface ShippingAddress {
   address: string;
   city: string;
@@ -18,7 +17,6 @@ interface ShippingAddress {
   country: string;
 }
 
-// Payment Result Schema
 interface PaymentResult {
   id: string;
   status: string;
@@ -26,7 +24,6 @@ interface PaymentResult {
   email_address: string;
 }
 
-// Order Interface
 export interface IOrder {
   _id: string;
   user: any;
@@ -70,4 +67,5 @@ const Order = {
   updateOne: () => Promise.resolve({ acknowledged: true, modifiedCount: 1 })
 };
 
+// Export the stub model
 export default Order;
