@@ -1,0 +1,22 @@
+{
+  "name": "iwanyu",
+  "version": "1.0.0",
+  "description": "Iwanyu E-commerce Platform",
+  "main": "index.js",
+  "scripts": {
+    "start": "cd backend && npm start",
+    "build": "cd backend && npm run build",
+    "install-deps": "cd backend && npm install"
+  },
+  "engines": {
+    "node": "16.x"
+  },
+  "keywords": [
+    "e-commerce",
+    "nodejs",
+    "express",
+    "nextjs"
+  ],
+  "author": "Davy Dushimiyimana",
+  "license": "MIT"
+}

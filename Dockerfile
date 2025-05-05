@@ -1,15 +1,35 @@
-FROM node:18.20.0
+# Build stage
+FROM node:16-slim AS builder
 
 WORKDIR /app
 
-# Copy backend directory
-COPY backend ./
+# Copy package files
+COPY backend/package*.json ./
 
 # Install dependencies
-RUN cd /app && npm install
+RUN npm install --quiet
+
+# Copy source code
+COPY backend/ ./
 
 # Build the application
-RUN cd /app && npm run build
+RUN npm run build
+
+# Production stage
+FROM node:16-slim
+
+WORKDIR /app
+
+# Copy package files
+COPY backend/package*.json ./
+
+# Install production dependencies only
+RUN npm install --quiet --only=production
+
+# Copy built application from builder stage
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/src/db ./src/db
+COPY --from=builder /app/tsconfig.json ./
 
 # Set environment variables
 ENV NODE_ENV=production
@@ -19,4 +39,4 @@ ENV PORT=10000
 EXPOSE 10000
 
 # Start the application with migrations and seeding
-CMD ["sh", "-c", "cd /app && npm run migrate && npm run seed && npm start"]
+CMD ["sh", "-c", "npm run migrate && npm run seed && npm start"]
