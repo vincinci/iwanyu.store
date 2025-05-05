@@ -29,27 +29,41 @@ export interface IUser {
   role: 'customer' | 'vendor' | 'admin';
   vendorInfo?: VendorInfo;
   comparePassword(candidatePassword: string): Promise<boolean>;
+  save(): Promise<IUser>;
 }
 
 // Create a stub model that mimics the Mongoose interface
-const userMethods = {
+const userObj = {
+  _id: 'user-id-123',
+  username: 'testuser',
+  email: 'test@example.com',
+  password: 'hashedpassword',
+  role: 'customer' as const,
   comparePassword: async (candidatePassword: string) => {
     return bcrypt.compare(candidatePassword, 'hashed_password');
-  }
+  },
+  save: async () => userObj
 };
 
 const User = {
   find: () => ({
+    select: () => Promise.resolve([userObj]),
     limit: () => ({
       skip: () => ({
-        sort: () => Promise.resolve([])
+        sort: () => Promise.resolve([userObj])
       })
     })
   }),
-  findById: () => Promise.resolve({ ...userMethods }),
-  findOne: () => Promise.resolve({ ...userMethods }),
-  countDocuments: () => Promise.resolve(0),
-  create: () => Promise.resolve({ ...userMethods }),
+  findById: (id: string) => ({
+    select: () => Promise.resolve({...userObj, _id: id}),
+    exec: () => Promise.resolve({...userObj, _id: id})
+  }),
+  findOne: (query: any) => ({
+    select: () => Promise.resolve({...userObj, ...query}),
+    exec: () => Promise.resolve({...userObj, ...query})
+  }),
+  countDocuments: () => Promise.resolve(1),
+  create: (data: any) => Promise.resolve({...userObj, ...data}),
   updateOne: () => Promise.resolve({ acknowledged: true, modifiedCount: 1 })
 };
 
