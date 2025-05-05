@@ -28,7 +28,7 @@ services:
     name: iwanyu-frontend
     env: node
     buildCommand: cd client && npm install && npm run build
-    startCommand: cd client && npm start
+    startCommand: cd client && node index.js
     envVars:
       - key: NODE_ENV
         value: production
