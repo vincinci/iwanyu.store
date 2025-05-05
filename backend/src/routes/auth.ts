@@ -1,5 +1,5 @@
 import express, { Request, Response, NextFunction } from 'express';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { db, query } from '../config/neon';
 import { users } from '../db/schema';

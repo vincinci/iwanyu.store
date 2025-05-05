@@ -22,7 +22,7 @@ cat > /Users/dushimiyimanadavy/CascadeProjects/Iwanyu/backend/src/models/user.ts
 // This is a stub file for compatibility with existing imports
 // The application has been migrated from MongoDB to Neon PostgreSQL with Drizzle ORM
 
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 
 // Define vendor info interface
 interface VendorInfo {

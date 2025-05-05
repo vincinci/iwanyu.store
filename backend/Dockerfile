@@ -2,11 +2,17 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Copy the entire application first
-COPY . .
+# Install dependencies required for bcrypt
+RUN apk add --no-cache make gcc g++ python3 git
 
-# Install dependencies using npm install
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies
 RUN npm install
+
+# Copy the rest of the application
+COPY . .
 
 # Set environment variables
 ENV NODE_ENV=production
