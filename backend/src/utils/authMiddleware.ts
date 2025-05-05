@@ -1,5 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
-import { auth, db } from '../config/firebase';
+import jwt from 'jsonwebtoken';
+import { db } from '../config/neon';
+import { users } from '../db/schema';
+import { eq } from 'drizzle-orm';
+
+// JWT Secret Key - should be in environment variables
+const JWT_SECRET = process.env.JWT_SECRET || 'iwanyu-secret-key';
 
 // Extend the Express Request interface to include the user property
 declare global {
@@ -22,38 +28,44 @@ export const protect = async (req: Request, res: Response, next: NextFunction) =
     const token = req.header('Authorization')?.replace('Bearer ', '');
     
     if (!token) {
-      return res.status(401).json({ message: 'Not authorized, no token' });
+      res.status(401).json({ message: 'Not authorized, no token' });
+      return;
     }
 
     try {
-      // Verify the Firebase token
-      const decodedToken = await auth.verifyIdToken(token);
-      const uid = decodedToken.uid;
+      // Verify the JWT token
+      const decoded = jwt.verify(token, JWT_SECRET) as {
+        _id: string;
+        username: string;
+        email: string;
+        role: 'customer' | 'vendor' | 'admin';
+      };
       
       // Store the token for potential use in other middleware
       req.token = token;
       
-      // Get user data from Firestore
-      const userDoc = await db.collection('users').doc(uid).get();
+      // Get user data from database
+      const userResults = await db.select().from(users).where(eq(users.id, decoded._id));
       
-      if (!userDoc.exists) {
-        return res.status(404).json({ message: 'User not found' });
+      if (userResults.length === 0) {
+        res.status(404).json({ message: 'User not found' });
+        return;
       }
       
-      const userData = userDoc.data();
+      const user = userResults[0];
       
       // Set the user property on the request object
       req.user = {
-        _id: uid,
-        username: userData?.username || 'Unknown',
-        email: userData?.email || 'unknown@example.com',
-        role: (userData?.role as 'customer' | 'vendor' | 'admin') || 'customer'
+        _id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role as 'customer' | 'vendor' | 'admin'
       };
       
       next();
     } catch (error) {
       console.error('Token verification error:', error);
-      return res.status(401).json({ message: 'Not authorized, invalid token' });
+      res.status(401).json({ message: 'Not authorized, invalid token' });
     }
   } catch (error) {
     console.error('Auth middleware error:', error);

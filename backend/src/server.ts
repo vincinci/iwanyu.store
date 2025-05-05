@@ -1,8 +1,9 @@
 import express, { Request, Response } from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
-import { initializeApp, cert } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
+
+// Import database connection
+import './config/neon';
 
 // Import routes
 import authRoutes from './routes/auth';
@@ -54,7 +55,7 @@ app.get('/api/healthcheck', function(req: Request, res: Response) {
     status: 'ok', 
     message: 'Server is running',
     environment: process.env.NODE_ENV || 'production',
-    firebase: process.env.FIREBASE_PROJECT_ID || 'not configured'
+    database: 'neon-postgresql'
   });
 });
 

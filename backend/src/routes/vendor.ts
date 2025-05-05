@@ -1,58 +1,38 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { protect } from '../utils/authMiddleware';
 import { AuthRequest } from '../routes/auth';
-import { db } from '../config/firebase';
+import { db } from '../config/neon';
 import flutterwaveService from '../services/flutterwaveService';
+import { users, products, subscriptionPlans } from '../db/schema';
+import { eq, and, desc, count } from 'drizzle-orm';
+import { v4 as uuidv4 } from 'uuid';
 
 const router = express.Router();
-
-// Subscription plans
-const SUBSCRIPTION_PLANS: Record<string, {
-  id: string;
-  name: string;
-  price: number;
-  features: string[];
-}> = {
-  basic: {
-    id: 'basic',
-    name: 'Basic Vendor',
-    price: 50,
-    features: [
-      'List up to 10 products',
-      'Basic analytics',
-      'Standard customer support',
-      '5% commission fee'
-    ]
-  },
-  premium: {
-    id: 'premium',
-    name: 'Premium Vendor',
-    price: 100,
-    features: [
-      'Unlimited products',
-      'Advanced analytics',
-      'Priority customer support',
-      '3% commission fee'
-    ]
-  },
-  enterprise: {
-    id: 'enterprise',
-    name: 'Enterprise Vendor',
-    price: 200,
-    features: [
-      'Unlimited products',
-      'Premium analytics & insights',
-      'Dedicated account manager',
-      '2% commission fee'
-    ]
-  }
-};
 
 // @route   GET /api/vendor/subscription-plans
 // @desc    Get available subscription plans
 // @access  Public
-router.get('/subscription-plans', (req: Request, res: Response) => {
-  res.json(SUBSCRIPTION_PLANS);
+router.get('/subscription-plans', async (req: Request, res: Response) => {
+  try {
+    // Get subscription plans from database
+    const plans = await db.select().from(subscriptionPlans);
+    
+    // Format plans for response
+    const formattedPlans = plans.reduce((acc, plan) => {
+      acc[plan.id] = {
+        id: plan.id,
+        name: plan.name,
+        price: plan.price / 100, // Convert from cents to dollars for display
+        features: plan.features as string[]
+      };
+      return acc;
+    }, {} as Record<string, { id: string; name: string; price: number; features: string[] }>);
+    
+    res.json(formattedPlans);
+  } catch (error) {
+    console.error('Error fetching subscription plans:', error);
+    res.status(500).json({ message: 'Server error while fetching subscription plans' });
+  }
 });
 
 // @route   POST /api/vendor/apply
@@ -76,17 +56,18 @@ router.post('/apply', protect, async (req: AuthRequest, res: Response, next: Nex
     
     const userId = req.user._id;
     
-    // Check if user exists in Firestore
-    const userDoc = await db.collection('users').doc(userId).get();
-    if (!userDoc.exists) {
+    // Check if user exists in database
+    const userResults = await db.select().from(users).where(eq(users.id, userId));
+    
+    if (userResults.length === 0) {
       res.status(404).json({ message: 'User not found' });
       return;
     }
     
-    const userData = userDoc.data();
+    const userData = userResults[0];
     
     // Check if user is already a vendor
-    if (userData?.role === 'vendor') {
+    if (userData.role === 'vendor') {
       res.status(400).json({ message: 'User is already a vendor' });
       return;
     }
@@ -102,10 +83,13 @@ router.post('/apply', protect, async (req: AuthRequest, res: Response, next: Nex
       appliedAt: new Date().toISOString()
     };
     
-    // Update user document with vendor info
-    await db.collection('users').doc(userId).update({
-      vendorInfo
-    });
+    // Update user with vendor info
+    await db.update(users)
+      .set({
+        vendorInfo: JSON.stringify(vendorInfo),
+        updatedAt: new Date()
+      })
+      .where(eq(users.id, userId));
     
     res.status(201).json({ 
       message: 'Vendor application submitted successfully',
@@ -132,10 +116,14 @@ router.post('/process-payment', protect, async (req: AuthRequest, res: Response,
     }
     
     // Validate subscription plan
-    if (!SUBSCRIPTION_PLANS[subscriptionPlan as keyof typeof SUBSCRIPTION_PLANS]) {
+    const planResults = await db.select().from(subscriptionPlans).where(eq(subscriptionPlans.id, subscriptionPlan));
+    
+    if (planResults.length === 0) {
       res.status(400).json({ message: 'Invalid subscription plan' });
       return;
     }
+    
+    const plan = planResults[0];
     
     // Get user ID from auth middleware
     if (!req.user) {
@@ -145,36 +133,38 @@ router.post('/process-payment', protect, async (req: AuthRequest, res: Response,
     
     const userId = req.user._id;
     
-    // Check if user exists in Firestore
-    const userDoc = await db.collection('users').doc(userId).get();
-    if (!userDoc.exists) {
+    // Check if user exists in database
+    const userResults = await db.select().from(users).where(eq(users.id, userId));
+    
+    if (userResults.length === 0) {
       res.status(404).json({ message: 'User not found' });
       return;
     }
     
-    const userData = userDoc.data();
+    const userData = userResults[0];
     
     // Check if user has vendorInfo
-    if (!userData?.vendorInfo) {
+    if (!userData.vendorInfo) {
       res.status(400).json({ message: 'Vendor application not found' });
       return;
     }
     
-    // Get subscription plan details
-    const plan = SUBSCRIPTION_PLANS[subscriptionPlan as keyof typeof SUBSCRIPTION_PLANS];
+    const vendorInfo = typeof userData.vendorInfo === 'string' 
+      ? JSON.parse(userData.vendorInfo) 
+      : userData.vendorInfo;
     
     // Generate a unique transaction reference
     const txRef = flutterwaveService.generateTransactionReference();
     
     // Create payment payload for Flutterwave
     const paymentPayload = {
-      amount: plan.price,
+      amount: plan.price / 100, // Convert from cents to dollars for payment
       currency: 'USD',
       payment_options: 'card',
       customer: {
         email: userData.email,
         name: userData.username,
-        phone_number: userData.vendorInfo.phoneNumber || ''
+        phone_number: vendorInfo.phoneNumber || ''
       },
       customizations: {
         title: 'Iwanyu Vendor Subscription',
@@ -191,6 +181,16 @@ router.post('/process-payment', protect, async (req: AuthRequest, res: Response,
     
     // Generate payment link with Flutterwave
     const paymentResponse = await flutterwaveService.generatePaymentLink(paymentPayload);
+    
+    // Update user with transaction reference
+    vendorInfo.transactionReference = txRef;
+    
+    await db.update(users)
+      .set({
+        vendorInfo: JSON.stringify(vendorInfo),
+        updatedAt: new Date()
+      })
+      .where(eq(users.id, userId));
     
     // Return the payment link to redirect the user
     res.json({
@@ -226,36 +226,47 @@ router.get('/payment-callback', async (req: Request, res: Response, next: NextFu
       // Extract metadata from the transaction
       const { userId, subscriptionPlan } = verificationResponse.data.meta;
       
-      // Find the user in Firestore
-      const userDoc = await db.collection('users').doc(userId).get();
-      if (!userDoc.exists) {
+      // Find the user in database
+      const userResults = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (userResults.length === 0) {
         res.status(404).json({ message: 'User not found' });
         return;
       }
       
-      const userData = userDoc.data();
+      const userData = userResults[0];
       
       // Check if user has vendorInfo
-      if (!userData?.vendorInfo) {
+      if (!userData.vendorInfo) {
         res.status(400).json({ message: 'Vendor application not found' });
         return;
       }
+      
+      const vendorInfo = typeof userData.vendorInfo === 'string' 
+        ? JSON.parse(userData.vendorInfo) 
+        : userData.vendorInfo;
       
       // Calculate subscription end date (1 month from now)
       const subscriptionEndDate = new Date();
       subscriptionEndDate.setMonth(subscriptionEndDate.getMonth() + 1);
       
+      // Update vendor info
+      vendorInfo.status = 'approved';
+      vendorInfo.approvedAt = new Date().toISOString();
+      vendorInfo.subscriptionPlan = subscriptionPlan;
+      vendorInfo.subscriptionStartDate = new Date().toISOString();
+      vendorInfo.subscriptionEndDate = subscriptionEndDate.toISOString();
+      vendorInfo.transactionReference = tx_ref as string;
+      vendorInfo.transactionId = transaction_id as string;
+      
       // Update user to vendor role
-      await db.collection('users').doc(userId).update({
-        role: 'vendor',
-        'vendorInfo.status': 'approved',
-        'vendorInfo.approvedAt': new Date().toISOString(),
-        'vendorInfo.subscriptionPlan': subscriptionPlan,
-        'vendorInfo.subscriptionStartDate': new Date().toISOString(),
-        'vendorInfo.subscriptionEndDate': subscriptionEndDate.toISOString(),
-        'vendorInfo.transactionReference': tx_ref as string,
-        'vendorInfo.transactionId': transaction_id as string
-      });
+      await db.update(users)
+        .set({
+          role: 'vendor',
+          vendorInfo: JSON.stringify(vendorInfo),
+          updatedAt: new Date()
+        })
+        .where(eq(users.id, userId));
       
       // Redirect to success page
       res.redirect(`${process.env.FRONTEND_URL}/become-vendor/success`);
@@ -282,27 +293,33 @@ router.get('/dashboard', protect, async (req: AuthRequest, res: Response, next: 
     
     const userId = req.user._id;
     
-    // Check if user exists in Firestore
-    const userDoc = await db.collection('users').doc(userId).get();
-    if (!userDoc.exists) {
+    // Check if user exists in database
+    const userResults = await db.select().from(users).where(eq(users.id, userId));
+    
+    if (userResults.length === 0) {
       res.status(404).json({ message: 'User not found' });
       return;
     }
     
-    const userData = userDoc.data();
+    const userData = userResults[0];
     
     // Check if user is a vendor
-    if (userData?.role !== 'vendor') {
+    if (userData.role !== 'vendor') {
       res.status(403).json({ message: 'Access denied. User is not a vendor' });
       return;
     }
     
-    // Get product count
-    const productsSnapshot = await db.collection('products')
-      .where('vendorId', '==', userId)
-      .get();
+    const vendorInfo = typeof userData.vendorInfo === 'string' 
+      ? JSON.parse(userData.vendorInfo) 
+      : userData.vendorInfo;
     
-    const totalProducts = productsSnapshot.size;
+    // Get product count
+    const productsCount = await db
+      .select({ count: count() })
+      .from(products)
+      .where(eq(products.vendorId, userId));
+    
+    const totalProducts = productsCount[0]?.count || 0;
     
     // Get order stats (in a real app, you'd calculate this from orders)
     // For now, we'll just return placeholder values
@@ -313,13 +330,13 @@ router.get('/dashboard', protect, async (req: AuthRequest, res: Response, next: 
         _id: userId,
         username: userData.username,
         email: userData.email,
-        storeName: userData.vendorInfo?.storeName,
-        description: userData.vendorInfo?.description,
-        category: userData.vendorInfo?.category,
-        subscriptionPlan: userData.vendorInfo?.subscriptionPlan,
-        subscriptionStartDate: userData.vendorInfo?.subscriptionStartDate,
-        subscriptionEndDate: userData.vendorInfo?.subscriptionEndDate,
-        status: userData.vendorInfo?.status
+        storeName: vendorInfo?.storeName,
+        description: vendorInfo?.description,
+        category: vendorInfo?.category,
+        subscriptionPlan: vendorInfo?.subscriptionPlan,
+        subscriptionStartDate: vendorInfo?.subscriptionStartDate,
+        subscriptionEndDate: vendorInfo?.subscriptionEndDate,
+        status: vendorInfo?.status
       },
       stats: {
         totalProducts,

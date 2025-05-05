@@ -1,8 +1,15 @@
-import express, { Request, Response } from 'express';
-import { auth, db } from '../config/firebase';
-import { FirebaseError } from 'firebase-admin';
+import express, { Request, Response, NextFunction } from 'express';
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
+import { db, query } from '../config/neon';
+import { users } from '../db/schema';
+import { eq } from 'drizzle-orm';
+import { v4 as uuidv4 } from 'uuid';
 
 const router = express.Router();
+
+// JWT Secret Key - should be in environment variables
+const JWT_SECRET = process.env.JWT_SECRET || 'iwanyu-secret-key';
 
 // Interface for the request with user data
 interface RegisterRequest extends Request {
@@ -38,165 +45,202 @@ export interface AuthRequest extends Request {
 }
 
 // Register a new user
-router.post('/register', (req: RegisterRequest, res: Response) => {
-  (async () => {
-    try {
-      const { username, email, password, role } = req.body;
+router.post('/register', async (req: RegisterRequest, res: Response, next: NextFunction) => {
+  try {
+    const { username, email, password, role } = req.body;
 
-      // Validate required fields
-      if (!username || !email || !password) {
-        return res.status(400).json({ message: 'Please provide all required fields' });
-      }
-
-      // Create user in Firebase Authentication
-      const userRecord = await auth.createUser({
-        email,
-        password,
-        displayName: username,
-      });
-
-      // Set custom claims for user role
-      await auth.setCustomUserClaims(userRecord.uid, {
-        role: role || 'customer'
-      });
-
-      // Create user document in Firestore
-      await db.collection('users').doc(userRecord.uid).set({
-        username,
-        email,
-        role: role || 'customer',
-        createdAt: new Date().toISOString(),
-        vendorInfo: null
-      });
-
-      // Generate custom token for the client
-      const token = await auth.createCustomToken(userRecord.uid);
-
-      console.log('User registered successfully:', userRecord.uid);
-
-      res.status(201).json({
-        _id: userRecord.uid,
-        username,
-        email,
-        role: role || 'customer',
-        token
-      });
-    } catch (error) {
-      console.error('Registration error:', error);
-      
-      // Handle Firebase specific errors
-      const firebaseError = error as FirebaseError;
-      
-      if (firebaseError.code === 'auth/email-already-exists') {
-        return res.status(400).json({ message: 'Email is already in use' });
-      }
-      
-      if (firebaseError.code === 'auth/invalid-email') {
-        return res.status(400).json({ message: 'Invalid email format' });
-      }
-      
-      if (firebaseError.code === 'auth/weak-password') {
-        return res.status(400).json({ message: 'Password is too weak' });
-      }
-      
-      res.status(500).json({ message: 'Server error during registration' });
+    // Validate required fields
+    if (!username || !email || !password) {
+      res.status(400).json({ message: 'Please provide all required fields' });
+      return;
     }
-  })();
+
+    // Check if email already exists
+    const existingUser = await db.select().from(users).where(eq(users.email, email));
+    
+    if (existingUser.length > 0) {
+      res.status(400).json({ message: 'Email is already in use' });
+      return;
+    }
+
+    // Hash the password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    // Generate a UUID for the user
+    const userId = uuidv4();
+
+    // Create user in the database
+    await db.insert(users).values({
+      id: userId,
+      username,
+      email,
+      password: hashedPassword,
+      role: role || 'customer',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      vendorInfo: null
+    });
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { 
+        _id: userId, 
+        username, 
+        email, 
+        role: role || 'customer' 
+      },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    console.log('User registered successfully:', userId);
+
+    res.status(201).json({
+      _id: userId,
+      username,
+      email,
+      role: role || 'customer',
+      token
+    });
+  } catch (error) {
+    console.error('Registration error:', error);
+    res.status(500).json({ message: 'Server error during registration' });
+  }
 });
 
 // Login user
-router.post('/login', (req: LoginRequest, res: Response) => {
-  (async () => {
-    try {
-      const { email, password } = req.body;
+router.post('/login', async (req: LoginRequest, res: Response, next: NextFunction) => {
+  try {
+    const { email, password } = req.body;
 
-      // Validate required fields
-      if (!email || !password) {
-        return res.status(400).json({ message: 'Please provide email and password' });
-      }
-
-      // For server-side login, we need to use Firebase Admin to verify credentials
-      // This is a workaround since Firebase Admin doesn't have direct email/password auth
-      
-      try {
-        // First, get the user by email
-        const userRecord = await auth.getUserByEmail(email);
-        
-        // We can't verify password directly with Admin SDK, so we'll create a custom token
-        // The client will use this token with signInWithCustomToken
-        const token = await auth.createCustomToken(userRecord.uid);
-        
-        // Get user data from Firestore
-        const userDoc = await db.collection('users').doc(userRecord.uid).get();
-        const userData = userDoc.data();
-
-        res.status(200).json({
-          _id: userRecord.uid,
-          username: userRecord.displayName,
-          email: userRecord.email,
-          role: userData?.role || 'customer',
-          token
-        });
-      } catch (firebaseError) {
-        console.error('Firebase auth error:', firebaseError);
-        
-        // Handle Firebase specific errors
-        const error = firebaseError as FirebaseError;
-        
-        if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-          return res.status(401).json({ message: 'Invalid email or password' });
-        }
-        
-        throw error; // Re-throw for the outer catch block
-      }
-    } catch (error) {
-      console.error('Login error:', error);
-      res.status(500).json({ message: 'Server error during login' });
+    // Validate required fields
+    if (!email || !password) {
+      res.status(400).json({ message: 'Please provide email and password' });
+      return;
     }
-  })();
+
+    // Find user by email
+    const userResults = await db.select().from(users).where(eq(users.email, email));
+    
+    if (userResults.length === 0) {
+      res.status(401).json({ message: 'Invalid email or password' });
+      return;
+    }
+
+    const user = userResults[0];
+
+    // Verify password
+    const isMatch = await bcrypt.compare(password, user.password);
+    
+    if (!isMatch) {
+      res.status(401).json({ message: 'Invalid email or password' });
+      return;
+    }
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { 
+        _id: user.id, 
+        username: user.username, 
+        email: user.email, 
+        role: user.role 
+      },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    res.status(200).json({
+      _id: user.id,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      token
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ message: 'Server error during login' });
+  }
 });
 
 // Get current user profile
-router.get('/profile', (req: AuthRequest, res: Response) => {
-  (async () => {
-    try {
-      // Get token from request header
-      const token = req.headers.authorization?.split(' ')[1];
-      
-      if (!token) {
-        return res.status(401).json({ message: 'Not authorized, no token' });
-      }
-      
-      try {
-        // Verify the Firebase token
-        const decodedToken = await auth.verifyIdToken(token);
-        const uid = decodedToken.uid;
-        
-        // Get user data from Firestore
-        const userDoc = await db.collection('users').doc(uid).get();
-        
-        if (!userDoc.exists) {
-          return res.status(404).json({ message: 'User not found' });
-        }
-        
-        const userData = userDoc.data();
-        
-        res.status(200).json({
-          _id: uid,
-          username: userData?.username,
-          email: userData?.email,
-          role: userData?.role || 'customer',
-          vendorInfo: userData?.vendorInfo || null
-        });
-      } catch (verifyError) {
-        console.error('Token verification error:', verifyError);
-        return res.status(401).json({ message: 'Not authorized, invalid token' });
-      }
-    } catch (error) {
-      console.error('Profile error:', error);
-      res.status(500).json({ message: 'Server error' });
+router.get('/profile', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    // Get token from request header
+    const token = req.headers.authorization?.split(' ')[1];
+    
+    if (!token) {
+      res.status(401).json({ message: 'Not authorized, no token' });
+      return;
     }
-  })();
+    
+    try {
+      // Verify the JWT token
+      const decoded = jwt.verify(token, JWT_SECRET) as {
+        _id: string;
+        username: string;
+        email: string;
+        role: 'customer' | 'vendor' | 'admin';
+      };
+      
+      // Get user data from database
+      const userResults = await db.select().from(users).where(eq(users.id, decoded._id));
+      
+      if (userResults.length === 0) {
+        res.status(404).json({ message: 'User not found' });
+        return;
+      }
+      
+      const user = userResults[0];
+      
+      res.status(200).json({
+        _id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        vendorInfo: user.vendorInfo || null
+      });
+    } catch (verifyError) {
+      console.error('Token verification error:', verifyError);
+      res.status(401).json({ message: 'Not authorized, invalid token' });
+    }
+  } catch (error) {
+    console.error('Profile error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
 });
+
+// Authentication middleware
+export const protect = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    // Get token from request header
+    const token = req.headers.authorization?.split(' ')[1];
+    
+    if (!token) {
+      res.status(401).json({ message: 'Not authorized, no token' });
+      return;
+    }
+    
+    try {
+      // Verify the JWT token
+      const decoded = jwt.verify(token, JWT_SECRET) as {
+        _id: string;
+        username: string;
+        email: string;
+        role: 'customer' | 'vendor' | 'admin';
+      };
+      
+      // Set user in request
+      req.user = decoded;
+      next();
+    } catch (verifyError) {
+      console.error('Token verification error:', verifyError);
+      res.status(401).json({ message: 'Not authorized, invalid token' });
+    }
+  } catch (error) {
+    console.error('Auth middleware error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
 
 export default router;

@@ -1,9 +1,11 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { protect } from '../utils/authMiddleware';
 import { AuthRequest } from '../routes/auth';
-import { db } from '../config/firebase';
+import { db } from '../config/neon';
 import { v4 as uuidv4 } from 'uuid';
 import flutterwaveService from '../services/flutterwaveService';
+import { orders, orderItems, products, users } from '../db/schema';
+import { eq, inArray } from 'drizzle-orm';
 
 const router = express.Router();
 
@@ -28,19 +30,17 @@ router.post('/', protect, async (req: AuthRequest, res: Response, next: NextFunc
     
     const userId = req.user._id;
     
-    // Fetch products from Firestore
+    // Fetch products from database
     const productIds = items.map((item: any) => item.productId);
-    const productsSnapshot = await Promise.all(
-      productIds.map(id => db.collection('products').doc(id).get())
+    
+    // Get all products in a single query
+    const productsData = await db.select().from(products).where(
+      inArray(products.id, productIds)
     );
     
-    const products = productsSnapshot
-      .filter(doc => doc.exists)
-      .map(doc => ({ id: doc.id, ...doc.data() }));
-    
     // Map products to order items with calculated prices
-    const orderItems = items.map((item: any) => {
-      const product = products.find(p => p.id === item.productId);
+    const orderItemsData = items.map((item: any) => {
+      const product = productsData.find(p => p.id === item.productId);
       if (!product) {
         throw new Error(`Product with ID ${item.productId} not found`);
       }
@@ -50,23 +50,25 @@ router.post('/', protect, async (req: AuthRequest, res: Response, next: NextFunc
         name: product.name,
         quantity: item.quantity,
         price: product.price,
-        image: product.images && product.images.length > 0 ? product.images[0] : '',
+        image: product.images && Array.isArray(product.images) && product.images.length > 0 
+          ? product.images[0] 
+          : '',
       };
     });
     
     // Calculate totals
-    const itemsPrice = orderItems.reduce((total, item) => total + item.price * item.quantity, 0);
+    const itemsPrice = orderItemsData.reduce((total, item) => total + item.price * item.quantity, 0);
     const shippingPrice = itemsPrice > 100 ? 0 : 10; // Free shipping for orders over $100
     const taxPrice = itemsPrice * 0.15; // 15% tax
     const totalPrice = itemsPrice + shippingPrice + taxPrice;
     
-    // Create order in Firestore
+    // Create order in database
     const orderId = uuidv4();
-    const orderData = {
+    
+    await db.insert(orders).values({
       id: orderId,
       userId,
-      orderItems,
-      shippingAddress,
+      shippingAddress: JSON.stringify(shippingAddress),
       paymentMethod,
       itemsPrice,
       shippingPrice,
@@ -76,21 +78,36 @@ router.post('/', protect, async (req: AuthRequest, res: Response, next: NextFunc
       paidAt: null,
       isDelivered: false,
       deliveredAt: null,
-      createdAt: new Date().toISOString(),
-    };
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
     
-    await db.collection('orders').doc(orderId).set(orderData);
+    // Insert order items
+    for (const item of orderItemsData) {
+      await db.insert(orderItems).values({
+        id: uuidv4(),
+        orderId,
+        productId: item.productId,
+        name: item.name,
+        quantity: item.quantity,
+        price: item.price,
+        image: item.image,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+    }
     
     // If payment method is Flutterwave, generate payment link
     if (paymentMethod === 'flutterwave') {
-      // Get user data from Firestore
-      const userDoc = await db.collection('users').doc(userId).get();
-      if (!userDoc.exists) {
+      // Get user data from database
+      const userData = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (userData.length === 0) {
         res.status(404).json({ message: 'User not found' });
         return;
       }
       
-      const userData = userDoc.data();
+      const user = userData[0];
       
       // Generate a unique transaction reference
       const txRef = flutterwaveService.generateTransactionReference();
@@ -101,9 +118,9 @@ router.post('/', protect, async (req: AuthRequest, res: Response, next: NextFunc
         currency: 'USD',
         payment_options: 'card',
         customer: {
-          email: userData?.email || '',
-          name: userData?.username || '',
-          phone_number: userData?.phoneNumber || ''
+          email: user.email || '',
+          name: user.username || '',
+          phone_number: user.phoneNumber || ''
         },
         customizations: {
           title: 'Iwanyu Order Payment',
@@ -122,16 +139,32 @@ router.post('/', protect, async (req: AuthRequest, res: Response, next: NextFunc
       const paymentResponse = await flutterwaveService.generatePaymentLink(paymentPayload);
       
       // Update order with transaction reference
-      await db.collection('orders').doc(orderId).update({
-        transactionReference: txRef
-      });
+      await db.update(orders)
+        .set({ transactionReference: txRef })
+        .where(eq(orders.id, orderId));
       
       // Return the payment link to redirect the user
       res.status(201).json({
         success: true,
         message: 'Order created and payment link generated',
         data: {
-          order: orderData,
+          order: {
+            id: orderId,
+            userId,
+            orderItems: orderItemsData,
+            shippingAddress,
+            paymentMethod,
+            itemsPrice,
+            shippingPrice,
+            taxPrice,
+            totalPrice,
+            isPaid: false,
+            paidAt: null,
+            isDelivered: false,
+            deliveredAt: null,
+            createdAt: new Date(),
+            transactionReference: txRef
+          },
           paymentLink: paymentResponse.data.link,
           txRef
         }
@@ -143,7 +176,24 @@ router.post('/', protect, async (req: AuthRequest, res: Response, next: NextFunc
     res.status(201).json({
       success: true,
       message: 'Order created',
-      data: { order: orderData }
+      data: { 
+        order: {
+          id: orderId,
+          userId,
+          orderItems: orderItemsData,
+          shippingAddress,
+          paymentMethod,
+          itemsPrice,
+          shippingPrice,
+          taxPrice,
+          totalPrice,
+          isPaid: false,
+          paidAt: null,
+          isDelivered: false,
+          deliveredAt: null,
+          createdAt: new Date()
+        } 
+      }
     });
   } catch (error) {
     console.error('Order creation error:', error);
@@ -170,24 +220,19 @@ router.get('/payment-callback', async (req: Request, res: Response, next: NextFu
       // Extract metadata from the transaction
       const { orderId } = verificationResponse.data.meta;
       
-      // Find the order in Firestore
-      const orderDoc = await db.collection('orders').doc(orderId).get();
-      if (!orderDoc.exists) {
-        res.status(404).json({ message: 'Order not found' });
-        return;
-      }
-      
       // Update order to paid
-      await db.collection('orders').doc(orderId).update({
-        isPaid: true,
-        paidAt: new Date().toISOString(),
-        paymentResult: {
-          id: transaction_id as string,
-          status: 'completed',
-          update_time: new Date().toISOString(),
-          email_address: verificationResponse.data.customer.email
-        }
-      });
+      await db.update(orders)
+        .set({
+          isPaid: true,
+          paidAt: new Date(),
+          paymentResult: JSON.stringify({
+            id: transaction_id as string,
+            status: 'completed',
+            update_time: new Date().toISOString(),
+            email_address: verificationResponse.data.customer.email
+          })
+        })
+        .where(eq(orders.id, orderId));
       
       // Redirect to success page
       res.redirect(`${process.env.FRONTEND_URL}/orders/${orderId}/success`);
@@ -207,22 +252,37 @@ router.get('/payment-callback', async (req: Request, res: Response, next: NextFu
 router.get('/:id', protect, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const orderId = req.params.id;
-    const orderDoc = await db.collection('orders').doc(orderId).get();
     
-    if (!orderDoc.exists) {
+    // Get order from database
+    const orderData = await db.select().from(orders).where(eq(orders.id, orderId));
+    
+    if (orderData.length === 0) {
       res.status(404).json({ message: 'Order not found' });
       return;
     }
     
-    const orderData = orderDoc.data();
+    const order = orderData[0];
+    
+    // Get order items
+    const orderItemsData = await db.select().from(orderItems).where(eq(orderItems.orderId, orderId));
     
     // Check if the order belongs to the user or if the user is an admin
-    if (orderData?.userId !== req.user?._id && req.user?.role !== 'admin') {
+    if (order.userId !== req.user?._id && req.user?.role !== 'admin') {
       res.status(403).json({ message: 'Not authorized to view this order' });
       return;
     }
     
-    res.json({ success: true, data: { order: orderData } });
+    // Parse shipping address from JSON string
+    const shippingAddress = order.shippingAddress ? JSON.parse(order.shippingAddress as string) : null;
+    
+    // Combine order with its items
+    const fullOrder = {
+      ...order,
+      shippingAddress,
+      orderItems: orderItemsData
+    };
+    
+    res.json({ success: true, data: { order: fullOrder } });
   } catch (error) {
     console.error('Get order error:', error);
     res.status(500).json({ message: 'Server error while fetching order' });
@@ -235,14 +295,41 @@ router.get('/:id', protect, async (req: AuthRequest, res: Response, next: NextFu
 router.get('/', protect, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const userId = req.user?._id;
-    const ordersSnapshot = await db.collection('orders')
-      .where('userId', '==', userId)
-      .orderBy('createdAt', 'desc')
-      .get();
     
-    const orders = ordersSnapshot.docs.map(doc => doc.data());
+    if (!userId) {
+      res.status(401).json({ message: 'Not authorized' });
+      return;
+    }
     
-    res.json({ success: true, data: { orders } });
+    // Get orders from database
+    const ordersData = await db.select()
+      .from(orders)
+      .where(eq(orders.userId, userId))
+      .orderBy(orders.createdAt);
+    
+    // Get all order items for these orders
+    const orderIds = ordersData.map(order => order.id);
+    
+    let orderItemsData: any[] = [];
+    if (orderIds.length > 0) {
+      orderItemsData = await db.select()
+        .from(orderItems)
+        .where(inArray(orderItems.orderId, orderIds));
+    }
+    
+    // Combine orders with their items
+    const fullOrders = ordersData.map(order => {
+      const items = orderItemsData.filter(item => item.orderId === order.id);
+      const shippingAddress = order.shippingAddress ? JSON.parse(order.shippingAddress as string) : null;
+      
+      return {
+        ...order,
+        shippingAddress,
+        orderItems: items
+      };
+    });
+    
+    res.json({ success: true, data: { orders: fullOrders } });
   } catch (error) {
     console.error('Get orders error:', error);
     res.status(500).json({ message: 'Server error while fetching orders' });
@@ -257,32 +344,50 @@ router.put('/:id/pay', protect, async (req: AuthRequest, res: Response, next: Ne
     const { paymentResult } = req.body;
     const orderId = req.params.id;
     
-    const orderDoc = await db.collection('orders').doc(orderId).get();
+    // Get order from database
+    const orderData = await db.select().from(orders).where(eq(orders.id, orderId));
     
-    if (!orderDoc.exists) {
+    if (orderData.length === 0) {
       res.status(404).json({ message: 'Order not found' });
       return;
     }
     
-    const orderData = orderDoc.data();
+    const order = orderData[0];
     
     // Check if the order belongs to the user
-    if (orderData?.userId !== req.user?._id) {
+    if (order.userId !== req.user?._id) {
       res.status(403).json({ message: 'Not authorized to update this order' });
       return;
     }
     
     // Update order to paid
-    const updatedOrder = {
-      ...orderData,
-      isPaid: true,
-      paidAt: new Date().toISOString(),
-      paymentResult
+    await db.update(orders)
+      .set({
+        isPaid: true,
+        paidAt: new Date(),
+        paymentResult: JSON.stringify(paymentResult),
+        updatedAt: new Date()
+      })
+      .where(eq(orders.id, orderId));
+    
+    // Get updated order
+    const updatedOrderData = await db.select().from(orders).where(eq(orders.id, orderId));
+    const updatedOrder = updatedOrderData[0];
+    
+    // Get order items
+    const orderItemsData = await db.select().from(orderItems).where(eq(orderItems.orderId, orderId));
+    
+    // Parse shipping address from JSON string
+    const shippingAddress = updatedOrder.shippingAddress ? JSON.parse(updatedOrder.shippingAddress as string) : null;
+    
+    // Combine order with its items
+    const fullOrder = {
+      ...updatedOrder,
+      shippingAddress,
+      orderItems: orderItemsData
     };
     
-    await db.collection('orders').doc(orderId).update(updatedOrder);
-    
-    res.json({ success: true, data: { order: updatedOrder } });
+    res.json({ success: true, data: { order: fullOrder } });
   } catch (error) {
     console.error('Update order payment error:', error);
     res.status(500).json({ message: 'Server error while updating order payment' });

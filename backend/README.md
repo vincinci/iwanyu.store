@@ -2,12 +2,38 @@
 
 This is the backend API for the Iwanyu E-commerce platform.
 
+## Database Migration: Firebase to Neon PostgreSQL
+
+The application has been migrated from Firebase to Neon PostgreSQL for improved performance, scalability, and SQL capabilities.
+
+### Migration Steps
+
+1. **Set up Neon PostgreSQL**
+   - Create an account at [Neon](https://neon.tech)
+   - Create a new project
+   - Get your database connection string from the dashboard
+
+2. **Update Environment Variables**
+   - Update your `.env` file with the following variables:
+     ```
+     DATABASE_URL=postgres://username:password@host:port/database
+     JWT_SECRET=your_jwt_secret_key
+     ```
+
+3. **Run Database Migrations**
+   - Generate migration files: `npx tsx src/db/generate-migration.ts`
+   - Apply migrations: `npx tsx src/db/migrate.ts`
+   - Seed the database: `npx tsx src/db/seed.ts`
+
+4. **Start the Server**
+   - Run: `npm run dev`
+
 ## Deployment to Render
 
 ### Prerequisites
 
 - A [Render](https://render.com) account
-- A MongoDB database (e.g., MongoDB Atlas)
+- A Neon PostgreSQL database
 - Flutterwave account for payment processing
 
 ### Deployment Steps
@@ -37,7 +63,7 @@ This is the backend API for the Iwanyu E-commerce platform.
 
    - `NODE_ENV`: `production`
    - `PORT`: `10000` (Render will automatically set the correct port)
-   - `MONGODB_URI`: Your MongoDB connection string
+   - `DATABASE_URL`: Your Neon PostgreSQL connection string
    - `JWT_SECRET`: Your JWT secret key
    - `FRONTEND_URL`: URL of your frontend application
    - `FLUTTERWAVE_PUBLIC_KEY`: Your Flutterwave public key
@@ -62,13 +88,19 @@ This is the backend API for the Iwanyu E-commerce platform.
 1. Clone the repository
 2. Install dependencies: `npm install`
 3. Create a `.env` file based on `.env.example`
-4. Run the development server: `npm run dev`
+4. Run the database migrations: 
+   ```
+   npx tsx src/db/migrate.ts
+   npx tsx src/db/seed.ts
+   ```
+5. Run the development server: `npm run dev`
 
 ## API Endpoints
 
 - **Auth**: `/api/auth`
   - Register: `POST /api/auth/register`
   - Login: `POST /api/auth/login`
+  - Profile: `GET /api/auth/profile`
 
 - **Vendor**: `/api/vendor`
   - Subscription Plans: `GET /api/vendor/subscription-plans`
@@ -80,5 +112,16 @@ This is the backend API for the Iwanyu E-commerce platform.
   - Create Order: `POST /api/orders`
   - Get Orders: `GET /api/orders`
   - Get Order by ID: `GET /api/orders/:id`
+  - Update Order Payment: `PUT /api/orders/:id/pay`
 
 - **Health Check**: `/api/health`
+
+## Database Schema
+
+The application uses Drizzle ORM with the following tables:
+
+- **users**: User accounts and authentication
+- **products**: Product catalog
+- **orders**: Customer orders
+- **order_items**: Individual items within orders
+- **subscription_plans**: Vendor subscription plans
