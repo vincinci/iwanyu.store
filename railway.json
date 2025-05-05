@@ -3,7 +3,7 @@
   "build": {
     "builder": "DOCKERFILE",
     "dockerfile": {
-      "path": "backend/Dockerfile"
+      "path": "Dockerfile"
     }
   },
   "deploy": {
