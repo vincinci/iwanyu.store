@@ -1,6 +1,7 @@
 {
   "name": "iwanyu-backend",
   "version": "1.0.0",
+  "description": "Iwanyu E-commerce Platform API",
   "main": "dist/server.js",
   "engines": {
     "node": ">=18.0.0"
@@ -10,7 +11,9 @@
     "start": "node dist/server.js",
     "dev": "ts-node-dev --respawn src/server.ts",
     "build": "tsc",
-    "postinstall": "npm run build && npx tsx src/db/execute-migration.ts && npx tsx src/db/seed.ts",
+    "migrate": "npx tsx src/db/execute-migration.ts",
+    "seed": "npx tsx src/db/seed.ts",
+    "postinstall": "npm run build",
     "start:dev": "cross-env PORT=3001 ts-node-dev --respawn src/server.ts",
     "start:prod": "cross-env PORT=8080 node dist/server.js",
     "start:js": "cross-env PORT=3001 node src/server.js"
@@ -18,7 +21,6 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "Iwanyu E-commerce Platform API",
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",
     "bcrypt": "^5.1.1",
