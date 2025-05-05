@@ -4,8 +4,8 @@
   publish = ".next"
 
 [build.environment]
-  NODE_VERSION = "16"
-  NPM_VERSION = "8"
+  NODE_VERSION = "18"
+  NPM_VERSION = "9"
   NEXT_PUBLIC_API_URL = "https://your-railway-backend-url.up.railway.app"
 
 [[plugins]]
