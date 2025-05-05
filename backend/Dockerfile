@@ -1,22 +1,16 @@
-FROM node:18-alpine
+FROM node:18
 
 WORKDIR /app
 
-# Install dependencies required for bcrypt
-RUN apk add --no-cache make gcc g++ python3 git
-
-# Copy package files
-COPY package*.json ./
-
-# Install dependencies
-RUN npm install
-
-# Copy the rest of the application
+# Copy everything at once
 COPY . .
 
 # Set environment variables
 ENV NODE_ENV=production
 ENV PORT=10000
+
+# Build the application
+RUN npm ci || npm install
 
 # Expose the port
 EXPOSE 10000
